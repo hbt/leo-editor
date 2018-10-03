@@ -16,7 +16,7 @@ Commands (bindable with @settings-->@keys-->@shortcuts):
 
 free-layout-load
     Open context menu for loading a different layout,
-    conventient keyboard shortcut target.
+    convenient keyboard shortcut target.
 free-layout-restore
     Use the layout this outline had when it was opened.
 free-layout-zoom
@@ -68,7 +68,7 @@ class FreeLayoutController(object):
     #@+node:ekr.20110318080425.14390: *3*  flc.ctor
     def __init__(self, c):
         '''Ctor for FreeLayoutController class.'''
-        # g.trace('(FreeLayoutController)',c) # ,g.callers(files=True))
+
         # if hasattr(c,'free_layout'):
             # return
         self.c = c
@@ -98,11 +98,10 @@ class FreeLayoutController(object):
         c = self.c
         if c != keys.get('c'):
             return
-        # g.trace(c.frame.title)
+
         # Careful: we could be unit testing.
         splitter = self.get_top_splitter() # A NestedSplitter.
         if not splitter:
-            # g.trace('no splitter!')
             return None
         # by default NestedSplitter's context menus are disabled, needed
         # once to globally enable them
@@ -161,16 +160,13 @@ class FreeLayoutController(object):
         Yes, the user could delete the secondary splitter but if so, there is
         not much we can do here.
         '''
-        trace = False and not g.unitTesting
         top = self.get_top_splitter()
         if top:
             w = top.find_child(QtWidgets.QWidget, "bodyFrame")
             while w:
                 if isinstance(w, NestedSplitter):
-                    if trace: g.trace('found splitter', id(w))
                     return w
                 w = w.parent()
-        if trace: g.trace('not found')
         return None
     #@+node:ekr.20160424035254.1: *3* flc.get_secondary_splitter & helper
     def get_secondary_splitter(self):
@@ -181,16 +177,13 @@ class FreeLayoutController(object):
         Yes, the user could delete the outline pane, but if so, there is not
         much we can do here.
         '''
-        trace = False and not g.unitTesting
         top = self.get_top_splitter()
         if top:
             w = top.find_child(QtWidgets.QWidget, 'outlineFrame')
             while w:
                 if isinstance(w, NestedSplitter):
-                    if trace: g.trace('found splitter', id(w))
                     return w
                 w = w.parent()
-        if trace: g.trace('not found')
         return None
     #@+node:tbrown.20110621120042.22914: *3* flc.get_top_splitter
     def get_top_splitter(self):
@@ -219,16 +212,14 @@ class FreeLayoutController(object):
         c = self.c
         if not (g.app and g.app.db):
             return # Can happen when running from the Leo bridge.
-        d = g.app.db.get('ns_layouts', {})
+        d = g.app.db.get('ns_layouts') or {}
         if c != keys.get('c'):
             return
-        # g.trace(c.frame.title)
         layout = c.config.getData("free-layout-layout")
         if layout:
             layout = json.loads('\n'.join(layout))
         name = c.db.get('_ns_layout')
         if name:
-            # g.trace('Layout:',name,'reloading',reloading)
             if reloading:
                 name = c.free_layout.original_layout
                 c.db['_ns_layout'] = name

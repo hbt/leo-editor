@@ -10,7 +10,7 @@ Importer = linescanner.Importer
 class Org_Importer(Importer):
     '''The importer for the org lanuage.'''
 
-    def __init__(self, importCommands):
+    def __init__(self, importCommands, **kwargs):
         '''Org_Importer.__init__'''
         # Init the base class.
         Importer.__init__(self,
@@ -19,16 +19,37 @@ class Org_Importer(Importer):
             state_class = None,
             strict = False,
         )
+        self.tc = self.load_nodetags()
 
     #@+others
+    #@+node:ekr.20171120084611.2: *3* org_i.clean_headline
+    tag_pattern = re.compile(r':([\w_@]+:)+\s*$')
+        # Recognize :tag: syntax only at the end of headlines.
+        # Use :tag1:tag2: to specify two tags, not :tag1: :tag2:
+
+    def clean_headline(self, s, p=None):
+        '''
+        Return a cleaned up headline for p.
+        Also parses org-mode tags.
+        '''
+        if p and self.tc:
+            # Support for #578: org-mode tags.
+            m = self.tag_pattern.search(s)
+            if m:
+                i = m.start()
+                # head = s[:i].strip()
+                tail = s[i+1:-1].strip()
+                tags = tail.split(':')
+                for tag in tags:
+                    self.tc.add_tag(p, tag)
+        return s
+
     #@+node:ekr.20161123194634.1: *3* org_i.gen_lines & helper
     org_pattern = re.compile(r'^(\*+)(.*)$')
 
     def gen_lines(self, s, parent):
         '''Node generator for org mode.'''
         self.inject_lines_ivar(parent)
-        # We may as well do this first.  See note below.
-        self.add_line(parent, '@others\n')
         self.parents = [parent]
         for line in g.splitLines(s):
             m = self.org_pattern.match(line)
@@ -42,11 +63,6 @@ class Org_Importer(Importer):
             else:
                 p = self.parents[-1]
                 self.add_line(p, line)
-        note = (
-            'Note: This node\'s body text is ignored when writing this file.\n\n' +
-            'The @others directive is not required.\n'
-        )
-        self.add_line(parent, note)
     #@+node:ekr.20161123194732.2: *4* org_i.find_parent
     def find_parent(self, level, h):
         '''
@@ -54,7 +70,6 @@ class Org_Importer(Importer):
         place-holder nodes as necessary.
         '''
         assert level >= 0
-        # g.trace('=====', level, h)
         n = level - len(self.parents)
         while level >= len(self.parents):
             headline = h if n == 0  else 'placeholder'
@@ -67,6 +82,16 @@ class Org_Importer(Importer):
             )
             self.parents.append(child)
         return self.parents[level]
+    #@+node:ekr.20171120084611.5: *3* org_i.load_nodetags
+    def load_nodetags(self):
+        '''
+        Load the nodetags.py plugin if necessary.
+        Return c.theTagController.
+        '''
+        c = self.c
+        if not getattr(c, 'theTagController', None):
+            g.app.pluginsController.loadOnePlugin('nodetags.py', verbose=False)
+        return getattr(c, 'theTagController', None)
     #@+node:ekr.20161126074103.1: *3* org_i.post_pass
     def post_pass(self, parent):
         '''
@@ -77,7 +102,7 @@ class Org_Importer(Importer):
         substages use the API for setting body text. Changing p.b directly will
         cause asserts to fail later in i.finish().
         '''
-        # Do nothing!
+        self.clean_all_headlines(parent)
     #@-others
 #@-others
 importer_dict = {

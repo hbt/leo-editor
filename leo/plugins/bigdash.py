@@ -71,6 +71,8 @@ def global_search_f(event):
 #@+node:ville.20120302233106.3580: *3* init (bigdash.py)
 def init ():
     '''Return True if the plugin has loaded successfully.'''
+    if not QtWebKitWidgets:
+        return False
     ok = g.app.gui.guiName() == "qt"
     if ok:
         g.app._global_search = GlobalSearch()
@@ -180,7 +182,7 @@ class BigDash(object):
 #@+node:ekr.20140919160020.17897: ** class GlobalSearch
 class GlobalSearch(object):
     #@+others
-    #@+node:ekr.20140919160020.17898: *3* __init__
+    #@+node:ekr.20140919160020.17898: *3* __init__(GlobalSearch)
     def __init__(self):
         '''Ctor for GlobalSearch class.'''
         self.fts_max_hits = g.app.config.getInt('fts_max_hits') or 30

@@ -12,6 +12,7 @@ assert g
 import copy
 import curses
 import curses.ascii
+import re
 # import string
 import sys
 #import curses.wrapper
@@ -80,25 +81,26 @@ class InputHandler(object):
 
         Return True if input has been completely handled.
         """
+        trace = False
+        trace_entry = True
+        trace_parent = False
+        
         def tell(f):
-            import re
             pattern = r'<bound method ([\w\.]*\.)?(\w+) of <([\w\.]*\.)?(\w+) object at (.+)>>'
             m = re.match(pattern, repr(f))
-            if m:
-                return '%s.%s' % (m.group(4), m.group(2))
-            else:
-                return repr(f)
+            return ('%s.%s' % (m.group(4), m.group(2))) if m else repr(f)
 
-        trace = False
-        trace_entry = False
-        trace_parent = False
         parent_widget = getattr(self, 'parent_widget', None)
         parent = getattr(self, 'parent', None)
         if trace and trace_entry:
-            g.trace('self: %20s, parent: %8s, %3s = %r' % (
+            # g.trace('self: %20s, parent: %8s, %3s = %r' % (
+            s = curses.ascii.unctrl(i)
+            if s == '^I': s = 'TAB'
+            if s == '^J': s = 'RETURN'
+            g.trace('========== %s, parent: %s, %s = %r' % (
                 self.__class__.__name__,
                 parent.__class__.__name__,
-                i, curses.ascii.unctrl(i),
+                i, s,
             ))
         # A special case for F4 so we can run unit tests.
         # myLeoSettings.leo binds F4.
@@ -107,7 +109,7 @@ class InputHandler(object):
             return True
         if i in self.handlers:
             f = self.handlers[i]
-            if trace: g.trace('handler: %3s %s' % (i, tell(f)))
+            if trace: g.trace('handler: %s %s' % (i, tell(f)))
             f(i)
             return True
         try:
@@ -189,12 +191,13 @@ class InputHandler(object):
         self.complex_handlers = _new_list
 
     #@+node:ekr.20170430114154.1: *3* IH.handlers (default for all widgets)
-    # Handler Methods here - npc convention - prefix with h_
+    # Handler Methods here - npyscreen convention - prefix with h_
 
     #@+others
     #@+node:ekr.20170430114213.1: *4* InputHandler.h_exit_down
     def h_exit_down(self, _input):
         """Called when user leaves the widget to the next widget"""
+        # The tab character is bound to this.
         # g.trace('MultiLine')
         if not self._test_safe_to_exit():
             return False
@@ -330,19 +333,20 @@ class Widget(InputHandler, wgwidget_proto._LinePrinter, EventHandler):
         self.initialize_event_handling()
     #@+node:ekr.20170429213619.3: *3* Widget._edit_loop
     def _edit_loop(self):
-
+        trace = False and not g.unitTesting
+        if trace: g.trace('BEGIN')
         if not self.parent.editing:
             _i_set_parent_editing = True
             self.parent.editing   = True
         else:
             _i_set_parent_editing = False
         while self.editing and self.parent.editing:
-            # g.pr('Widget._edit_loop:', self.__class__.__name__, g.callers(2))
+            if trace: g.trace('LOOP', self.__class__.__name__, g.callers(2))
             self.display()
             self.get_and_use_key_press()
         if _i_set_parent_editing:
             self.parent.editing = False
-
+        if trace: g.trace('END')
         if self.editing:
             self.editing    = False
             self.how_exited = True
@@ -495,6 +499,11 @@ class Widget(InputHandler, wgwidget_proto._LinePrinter, EventHandler):
     #@+node:ekr.20170428084208.424: *3* Widget.display
     def display(self):
         """Do an update of the object AND refresh the screen"""
+        trace = False and not g.unitTesting
+        if trace:
+            name = self.__class__.__name__
+            if name.startswith('Leo'):
+                g.trace('(Widget)', name, g.callers())
         if self.hidden:
             self.clear()
             self.parent.refresh()
@@ -511,8 +520,7 @@ class Widget(InputHandler, wgwidget_proto._LinePrinter, EventHandler):
     #@+node:ekr.20170429213619.1: *3* Widget.edit
     def edit(self):
         """Allow the user to edit the widget: ie. start handling keypresses."""
-
-        # g.trace('Widget')
+        g.trace('===== (Widget)')
         self.editing = 1
         self._pre_edit()
         self._edit_loop()
@@ -821,9 +829,13 @@ class Widget(InputHandler, wgwidget_proto._LinePrinter, EventHandler):
                 self.parent.parentApp.while_waiting()
     #@+node:ekr.20170428084208.423: *3* Widget.update
     def update(self, clear=True):
-        """How should object display itself on the screen. Define here, but do not actually refresh the curses
-        display, since this should be done as little as possible.  This base widget puts nothing on screen."""
-        g.trace('Widget', g.callers())
+        """
+        How should object display itself on the screen. Define here, but do not
+        actually refresh the curses display, since this should be done as
+        little as possible. This base widget puts nothing on screen.
+        """
+        trace = False and not g.unitTesting
+        if trace: g.trace('===== Widget', g.callers())
         if self.hidden:
             self.clear()
             return True
@@ -875,8 +887,12 @@ class Widget(InputHandler, wgwidget_proto._LinePrinter, EventHandler):
         pass
     #@+node:ekr.20170429213619.17: *4* Widget.when_value_edited
     def when_value_edited(self):
-        """Called when the user edits the value of the widget.  Will usually also be called the first time
-        that the user edits the widget."""
+        """
+        Called when the user edits the value of the widget.
+        
+        Will usually also be called the first time that the user edits the
+        widget.
+        """
         pass
     #@-others
 #@+node:ekr.20170428084208.428: ** class DummyWidget

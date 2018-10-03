@@ -87,13 +87,13 @@ Qt = None
 class backlinkController(object):
     """Display and edit links in leo trees"""
     #@+others
-    #@+node:ekr.20090616105756.3943: *3* __init__
+    #@+node:ekr.20090616105756.3943: *3* __init__ & reloadSettings (backlinkController)
     def __init__ (self,c):
         '''Ctor for backlinkController class.'''
         self.c = c
         self.c.backlinkController = self
         self.initIvars()
-        self.name_levels = c.config.getInt('backlink_name_levels') or 0
+        self.reloadSettings()
         self.fixIDs(c)
         if Tk:
             self.ui = backlinkTkUI(self)
@@ -107,6 +107,11 @@ class backlinkController(object):
         # already missed initial 'open2' because of after-create-leo-frame, so
         self.loadLinksInt()
         self.updateTabInt()
+        
+    def reloadSettings(self):
+        c = self.c
+        c.registerReloadSettings(self)
+        self.name_levels = c.config.getInt('backlink_name_levels') or 0
     #@+node:tbrown.20091005145931.5227: *3* fixIDs
     def fixIDs(self, c):
 
@@ -422,6 +427,7 @@ class backlinkController(object):
 
         for vnode in idsSeen:  # just the vnodes with link info.
             if 'links' not in self.vnode[vnode].u['_bklnk']:
+                g.trace(self.vnode[vnode].u)
                 # graphcanvas.py will only init x and y keys
                 self.vnode[vnode].u['_bklnk']['links'] = []
             links = self.vnode[vnode].u['_bklnk']['links']
@@ -670,23 +676,24 @@ class backlinkController(object):
             pass
         texts = []
         if (v.u and '_bklnk' in v.u and 'links' in v.u['_bklnk']):
-            i = 0
             links = v.u['_bklnk']['links']
             dests = []
             self.dests = dests
-            while i < len(links):
-                linkType, other = links[i]
-                otherV = self.vnode[other]
-                otherP = self.vnodePosition(otherV)
-                if not self.c.positionExists(otherP):
-                    self.showMessage('Lost link(s) deleted', color='red')
-                    del links[i]
-                else:
-                    i += 1
+            for data in links[:]: # Must use a copy.
+                linkType, other = data
+                try:
+                    otherV = self.vnode[other]
+                    otherP = self.vnodePosition(otherV)
                     dests.append((linkType, otherP))
+                except KeyError:
+                    self.showMessage('Lost link(s) deleted', other, color='red')
+                    links.remove(data)
+                except Exception:
+                    g.es_exception()
             if dests:
                 self.ui.enableDelete(True)
                 self.showMessage('Click a link to follow it', optional=True)
+                # pylint: disable=cell-var-from-loop
                 for i in dests:
                     
                     def goThere(where = i[1]):

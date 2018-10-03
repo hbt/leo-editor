@@ -15,9 +15,15 @@ class PrintingController(object):
     def __init__(self, c):
         '''Ctor for PrintingController class.'''
         self.c = c
+        self.reload_settings()
+        
+    def reload_settings(self):
+        c = self.c
         self.font_size = c.config.getString('printing-font-size') or '12'
         self.font_family = c.config.getString('printing-font-family') or 'DejaVu Sans Mono'
         self.stylesheet = self.construct_stylesheet()
+        
+    reloadSettings = reload_settings
     #@+node:ekr.20150419124739.8: *4* pr.construct stylesheet
     def construct_stylesheet(self):
         '''Return the Qt stylesheet to be used for printing.'''
@@ -73,7 +79,7 @@ class PrintingController(object):
     #@+node:ekr.20150419124739.15: *4* pr.getBodies
     def getBodies(self, p):
         '''Return a concatenated version of the tree at p'''
-        return '\n'.join([p2.b for p2 in p.self_and_subtree()])
+        return '\n'.join([p2.b for p2 in p.self_and_subtree(copy=False)])
     #@+node:ekr.20150420085602.1: *4* pr.getNodes
     def getNodes(self, p):
         '''Return the entire script at node p.'''

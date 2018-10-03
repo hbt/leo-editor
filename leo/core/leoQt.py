@@ -14,7 +14,8 @@ Callers are expected to use the *PyQt5* spellings of modules:
 
 # Define...
     # Qt, QtConst, QtCore, QtGui, QtWidgets, QUrl
-    # QtDeclarative, Qsci, QString, QtSvg, QtWebKit, QtWebKitWidgets
+    # QtDeclarative, QtMultimedia, Qsci, QString, QtSvg,
+    # QtWebKit, QtWebKitWidgets
     # printsupport
 import leo.core.leoGlobals as g
 strict = False
@@ -34,6 +35,8 @@ else:
         except ImportError:
             if strict:
                 print('leoQt.py: can not import either PyQt4 or PyQt5.')
+                g.es_exception() # PR #339.
+                print('')
                 raise
             else:
                 fail = True
@@ -42,8 +45,9 @@ if fail:
     isQt5 = False
     QString = g.u
     Qt = QtConst = QtCore = QtGui = QtWidgets = QUrl = None
-    QtDeclarative = Qsci = QtSvg = QtWebKit = QtWebKitWidgets = None
+    QtDeclarative = Qsci = QtSvg = QtMultimedia = QtWebKit = QtWebKitWidgets = None
     phonon = uic = None
+    QtMultimedia = None # Replacement for phonon.
     qt_version = '<no version>'
     printsupport = None
 elif isQt5:
@@ -56,6 +60,8 @@ elif isQt5:
         printsupport = Qt
     except ImportError:
         print('leoQt.py: can not fully import PyQt5.')
+        g.es_exception() # PR #339.
+        print('')
 else:
     try:
         from PyQt4 import QtCore
@@ -67,6 +73,8 @@ else:
         printsupport = QtWidgets
     except ImportError:
         print('leoQt.py: can not fully import PyQt4.')
+        g.es_exception() # PR #339.
+        print('')
 # Define qt_version
 if fail:
     pass
@@ -75,8 +83,6 @@ else:
     if 0:
         import leo.core.leoGlobals as g
         isNewQt = g.CheckVersion(qt_version, '4.5.0')
-if trace:
-    print('leoQt.py: isQt5: %s' % isQt5)
 # Define phonon,Qsci,QtSvg,QtWebKit,QtWebKitWidgets,uic.
 # These imports may fail without affecting the isQt5 constant.
 if fail:
@@ -95,6 +101,10 @@ elif isQt5:
         phonon = phonon.Phonon
     except ImportError:
         phonon = None
+    try:
+        from PyQt5 import QtMultimedia
+    except ImportError:
+        QtMultimedia = None
     try:
         from PyQt5 import Qsci
     except ImportError:
@@ -137,6 +147,8 @@ else:
         import PyQt4.QtDeclarative as QtDeclarative
     except ImportError:
         QtDeclarative = None
+    QtMultimedia = None
+        # Does not exist on Qt4.
     try:
         import PyQt4.phonon as phonon
         phonon = phonon.Phonon

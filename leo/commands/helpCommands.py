@@ -346,13 +346,12 @@ class HelpCommandsClass(BaseEditCommandsClass):
         for stroke in sorted(d):
             assert g.isStroke(stroke), repr(stroke)
             aList = d.get(stroke, [])
-            for si in aList:
-                assert g.isShortcutInfo(si), si
-                if si.commandName == commandName:
-                    pane = '' if si.pane == 'all' else ' %s:' % (si.pane)
+            for bi in aList:
+                if bi.commandName == commandName:
+                    pane = '' if bi.pane == 'all' else ' %s:' % (bi.pane)
                     s1 = pane
                     s2 = k.prettyPrintKey(stroke)
-                    s3 = si.commandName
+                    s3 = bi.commandName
                     n1 = max(n1, len(s1))
                     n2 = max(n2, len(s2))
                     data.append((s1, s2, s3),)
@@ -431,9 +430,9 @@ class HelpCommandsClass(BaseEditCommandsClass):
             if m is None: break
             name = m.group(1)
             junk, aList = c.config.getShortcut(name)
-            for si in aList:
-                if si.pane == 'all':
-                    key = c.k.prettyPrintKey(si.stroke.s)
+            for bi in aList:
+                if bi.pane == 'all':
+                    key = c.k.prettyPrintKey(bi.stroke.s)
                     break
             else: key = '<Alt-X>%s<Return>' % name
             s = s[: m.start()] + key + s[m.end():]
@@ -599,9 +598,9 @@ class HelpCommandsClass(BaseEditCommandsClass):
             dump-new-objects:  Print a summary of all newly-created Python objects.
             enable-gc-trace:   Enable tracing of the garbage collector.
             free-tree-widgets: Free all widgets used in Leo's outline pane.
-            print-focus:       Print information about the requested focus.
-            print-stats:       Print statistics about existing Python objects.
-            print-gc-summary:  Print a brief summary of all Python objects.
+            show-focus:        Print information about the requested focus.
+            show-stats:        Print statistics about existing Python objects.
+            show-gc-summary:   Print a brief summary of all Python objects.
             run-unit-tests:    Run unit tests in the presently selected tree.
             verbose-dump-objects: Print a more verbose listing of all existing Python objects.
 
@@ -769,8 +768,8 @@ class HelpCommandsClass(BaseEditCommandsClass):
             d = k.bindingsDict
             k.clearState()
             result = []
-            for si in d.get(event.stroke, []): # a list of ShortcutInfo objects.
-                pane, cmd = si.pane, si.commandName
+            for bi in d.get(event.stroke, []): # a list of BindingInfo objects.
+                pane, cmd = bi.pane, bi.commandName
                 result.append(cmd if pane == 'all' else '%s: %s' % (pane, cmd))
             s = '%s: %s' % (event.stroke.s, ','.join(result))
             k.showStateAndMode()
@@ -1135,7 +1134,7 @@ class HelpCommandsClass(BaseEditCommandsClass):
         #@-<< define s >>
         self.c.putHelpFor(s)
     #@+node:ekr.20150514063305.402: *3* printSettings
-    @cmd('print-settings')
+    @cmd('show-settings')
     def printSettings(self, event=None):
         '''
         Prints the value of every setting, except key bindings and commands and
@@ -1143,6 +1142,7 @@ class HelpCommandsClass(BaseEditCommandsClass):
         from:
 
         -     leoSettings.leo,
+        -  @  @button, @command, @mode.
         - [D] default settings.
         - [F] indicates the file being loaded,
         - [M] myLeoSettings.leo,

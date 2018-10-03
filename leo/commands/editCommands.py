@@ -5,7 +5,6 @@
 '''Leo's general editing commands.'''
 #@+<< imports >>
 #@+node:ekr.20150514050149.1: ** << imports >> (editCommands.py)
-import difflib
 import os
 import re
 import leo.core.leoGlobals as g
@@ -60,77 +59,22 @@ class EditCommandsClass(BaseEditCommandsClass):
         self.initBracketMatcher(c)
     #@+node:ekr.20150514063305.190: *3* ec.cache
     @cmd('clear-all-caches')
+    @cmd('clear-cache')
     def clearAllCaches(self, event=None):
         '''Clear all of Leo's file caches.'''
-        c = self.c
-        if c.cacher:
-            c.cacher.clearAllCaches()
-
-    @cmd('clear-cache')
-    def clearCache(self, event=None):
-        '''Clear the outline's file cache.'''
-        c = self.c
-        if c.cacher:
-            c.cacher.clearCache()
-    #@+node:ekr.20160331191740.1: *3* ec.diff-marked-nodes
-    @cmd('diff-marked-nodes')
-    def diffMarkedNodes(self, event):
-        '''
-        This command does nothing unless exactly two nodes, say p1 and p2, are marked.
-
-        When two nodes *are* marked, this command does the following:
-
-        1. Creates a **diff node** as the last top-level node. The body of the
-           diff node shows the diffs between the two marked nodes, that is,
-           difflib.Differ().compare(p1.b, p2.b)
-
-        2. Move *clones* of p1 and p2 to be children of the diff node,
-           and unmarks all nodes. This is usually what is wanted.
-
-        To rerun the command, just mark two nodes again.
-        '''
-        c = self.c
-        aList = [z for z in c.all_unique_positions() if z.isMarked()]
-        if len(aList) == 2:
-            p1, p2 = aList[0], aList[1]
-            lines1 = g.splitLines(p1.b.rstrip()+'\n')
-            lines2 = g.splitLines(p2.b.rstrip()+'\n')
-            diffLines = difflib.Differ().compare(lines1, lines2)
-            s = ''.join(list(diffLines))
-            p = c.lastTopLevel().insertAfter()
-            p.h = 'Compare: %s, %s' % (g.truncate(p1.h, 22), g.truncate(p2.h, 22))
-            p.b = '1: %s\n2: %s\n%s' % (p1.h, p2.h, s)
-            for p2 in aList:
-                p3 = p2.clone()
-                p3.moveToLastChildOf(p)
-            p.expand()
-            c.unmarkAll()
-            c.selectPosition(p)
-            c.redraw()
-        else:
-            g.es_print('%s nodes marked instead of 2' % len(aList))
+        g.app.global_cacher.clear()
+        g.app.commander_cacher.clear()
+        
+    @cmd('dump-caches')
+    def dumpCaches(self, event=None):
+        '''Dump, all of Leo's file caches.'''
+        g.app.global_cacher.dump()
+        g.app.commander_cacher.dump()
     #@+node:ekr.20150514063305.118: *3* ec.doNothing
     @cmd('do-nothing')
     def doNothing(self, event):
         '''A placeholder command, useful for testing bindings.'''
         pass
-    #@+node:ekr.20150514063305.213: *3* ec.evalExpression
-    @cmd('eval-expression')
-    def evalExpression(self, event):
-        '''Evaluate a Python Expression entered in the minibuffer.'''
-        k = self.c.k
-        k.setLabelBlue('Eval: ')
-        k.get1Arg(event, handler=self.evalExpression1)
-
-    def evalExpression1(self, event):
-        k = self.c.k
-        k.clearState()
-        try:
-            e = k.arg
-            result = str(eval(e, {}, {}))
-            k.setLabelGrey('Eval: %s -> %s' % (e, result))
-        except Exception:
-            k.setLabelGrey('Invalid Expression: %s' % e)
     #@+node:ekr.20150514063305.278: *3* ec.insertFileName
     @cmd('insert-file-name')
     def insertFileName(self, event=None):
@@ -379,7 +323,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         if hasattr(w, 'logCtrl'):
             w = w.logCtrl
         panes = [body, log, tree]
-        # g.trace(w in panes,event.widget,panes)
         if w in panes:
             i = panes.index(w) + 1
             if i >= len(panes): i = 0
@@ -387,7 +330,8 @@ class EditCommandsClass(BaseEditCommandsClass):
         else:
             pane = body
         # Warning: traces mess up the focus
-        # g.pr(g.app.gui.widget_name(w),g.app.gui.widget_name(pane))
+            # g.pr(g.app.gui.widget_name(w),g.app.gui.widget_name(pane))
+        #
         # This works from the minibuffer *only* if there is no typing completion.
         c.widgetWantsFocusNow(pane)
         k.newMinibufferWidget = pane
@@ -400,13 +344,11 @@ class EditCommandsClass(BaseEditCommandsClass):
         Cycle the keyboard focus between Leo's outline,
         all body editors and all tabs in the log pane.
         '''
-        trace = False and not g.unitTesting
         c, k = self.c, self.c.k
         w = event and event.widget # Does **not** require a text widget.
         pane = None # The widget that will get the new focus.
         log = c.frame.log
         w_name = c.widget_name(w)
-        if trace: g.trace('**before', w_name, 'isLog', log.isLogWidget(w))
         # w may not be the present body widget, so test its name, not its id.
         if w_name.find('tree') > -1 or w_name.startswith('head'):
             pane = c.frame.body.wrapper
@@ -434,9 +376,7 @@ class EditCommandsClass(BaseEditCommandsClass):
             pane = c.frame.tree.canvas if log.tabName == 'Log' else None
         else:
             # A safe default: go to the body.
-            if trace: g.trace('* default to body')
             pane = c.frame.body.wrapper
-        if trace: g.trace('**after', c.widget_name(pane), pane)
         if pane:
             k.newMinibufferWidget = pane
             c.widgetWantsFocusNow(pane)
@@ -570,58 +510,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             w.insert(i, line2)
         w.setInsertPoint(i + c1)
         self.endCommand(changed=True, setLabel=True)
-    #@+node:ekr.20150514063305.210: *3* ec: esc methods for Python evaluation
-    #@+node:ekr.20150514063305.211: *4* ec.watchEscape
-    @cmd('escape')
-    def watchEscape(self, event):
-        '''Enter watch escape mode.'''
-        k = self.c.k
-        char = event.char if event else ''
-        if not k.inState():
-            k.setState('escape', 'start', handler=self.watchEscape)
-            k.setLabelBlue('Esc ')
-        elif k.getStateKind() == 'escape':
-            state = k.getState('escape')
-            # hi1 = k.keysymHistory [0]
-            # hi2 = k.keysymHistory [1]
-            data1 = g.app.lossage[0]
-            data2 = g.app.lossage[1]
-            ch1, stroke1 = data1
-            ch2, stroke2 = data2
-            if state == 'esc esc' and char == ':':
-                self.evalExpression(event)
-            elif state == 'evaluate':
-                self.escEvaluate(event)
-            # elif hi1 == hi2 == 'Escape':
-            elif stroke1 == 'Escape' and stroke2 == 'Escape':
-                k.setState('escape', 'esc esc')
-                k.setLabel('Esc Esc -')
-            elif char not in ('Shift_L', 'Shift_R'):
-                k.keyboardQuit()
-    #@+node:ekr.20150514063305.212: *4* ec.escEvaluate (Revise)
-    def escEvaluate(self, event):
-        k = self.c.k
-        w = self.editWidget(event)
-        if not w:
-            return
-        char = event.char if event else ''
-        if k.getLabel() == 'Eval:':
-            k.setLabel('')
-        if char in ('\n', 'Return'):
-            expression = k.getLabel()
-            try:
-                ok = False
-                result = eval(expression, {}, {})
-                result = str(result)
-                i = w.getInsertPoint()
-                w.insert(i, result)
-                ok = True
-            finally:
-                k.keyboardQuit()
-                if not ok:
-                    k.setStatusLabel('Error: Invalid Expression')
-        else:
-            k.updateLabel(event)
     #@+node:ekr.20150514063305.214: *3* ec: fill column and centering
     #@+at
     # 
@@ -708,7 +596,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             s = w.getAllText()
             i, j = g.getLine(s, ind)
             line = s[i: j].strip()
-            # g.trace(len(line),repr(line))
             if len(line) >= fillColumn:
                 ind = j
             else:
@@ -934,10 +821,10 @@ class EditCommandsClass(BaseEditCommandsClass):
     # - Tree control recomputes height of each line.
     #@+node:ekr.20150514063305.230: *4* ec. Helpers
     #@+node:ekr.20150514063305.231: *5* ec.appendImageDictToList
-    def appendImageDictToList(self, aList, iconDir, path, xoffset, **kargs):
+    def appendImageDictToList(self, aList, path, xoffset, **kargs):
         c = self.c
-        path = c.os_path_finalize_join(iconDir, path)
-        relPath = g.makePathRelativeTo(path, iconDir)
+        relPath = path  # for finding icon on load in different environment
+        path = g.app.gui.getImageFinder(path)
         # pylint: disable=unpacking-non-sequence
         image, image_height = g.app.gui.getTreeImage(c, path)
         if not image:
@@ -967,31 +854,21 @@ class EditCommandsClass(BaseEditCommandsClass):
     #@+node:ekr.20150514063305.233: *5* ec.getIconList
     def getIconList(self, p):
         """Return list of icons for position p, call setIconList to apply changes"""
-        trace = False and not g.unitTesting
-        if trace:
-            if p == self.c.rootPosition(): g.trace('=' * 40)
-            g.trace(p.h)
         fromVnode = []
         if hasattr(p.v, 'unknownAttributes'):
-            if trace: g.trace(p.v.u)
             fromVnode = [dict(i) for i in p.v.u.get('icons', [])]
             for i in fromVnode: i['on'] = 'VNode'
-        if trace and fromVnode: g.trace('fromVnode', fromVnode, p.h)
         return fromVnode
     #@+node:ekr.20150514063305.234: *5* ec.setIconList & helpers
     def setIconList(self, p, l, setDirty=True):
         """Set list of icons for position p to l"""
-        trace = False and not g.unitTesting
         current = self.getIconList(p)
         if not l and not current: return # nothing to do
         lHash = ''.join([self.dHash(i) for i in l])
         cHash = ''.join([self.dHash(i) for i in current])
-        # if trace: g.trace('lHash:',lHash)
-        # if trace: g.trace('cHash:',cHash)
         if lHash == cHash:
             # no difference between original and current list of dictionaries
             return
-        if trace: g.trace(l, g.callers(6))
         self._setIconListHelper(p, l, p.v, setDirty)
     #@+node:ekr.20150514063305.235: *6* ec._setIconListHelper
     def _setIconListHelper(self, p, subl, uaLoc, setDirty):
@@ -1001,7 +878,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         subl - list of icons for the v or t node
         uaLoc - the v or t node
         """
-        trace = False and not g.unitTesting
         if subl: # Update the uA.
             if not hasattr(uaLoc, 'unknownAttributes'):
                 uaLoc.unknownAttributes = {}
@@ -1010,7 +886,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             uaLoc._p_changed = 1
             if setDirty:
                 p.setDirty()
-            if trace: g.trace('uA', uaLoc.u, uaLoc)
         else: # delete the uA.
             if hasattr(uaLoc, 'unknownAttributes'):
                 if 'icons' in uaLoc.unknownAttributes:
@@ -1018,7 +893,6 @@ class EditCommandsClass(BaseEditCommandsClass):
                     uaLoc._p_changed = 1
                     if setDirty:
                         p.setDirty()
-            if trace: g.trace('del uA[icons]', uaLoc)
     #@+node:ekr.20150514063305.236: *4* ec.deleteFirstIcon
     @cmd('delete-first-icon')
     def deleteFirstIcon(self, event=None):
@@ -1044,7 +918,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             name2 = d.get('file')
             name2 = c.os_path_finalize(name2)
             name2rel = d.get('relPath')
-            # g.trace('name',name,'\nrelPath',relPath,'\nabsRelPath',absRelPath,'\nname2',name2,'\nname2rel',name2rel)
             if not (name == name2 or absRelPath == name2 or relPath == name2rel):
                 newList.append(d)
         if len(newList) != len(aList):
@@ -1091,7 +964,7 @@ class EditCommandsClass(BaseEditCommandsClass):
         aList = []
         xoffset = 2
         for path in paths:
-            xoffset = self.appendImageDictToList(aList, iconDir, path, xoffset)
+            xoffset = self.appendImageDictToList(aList, path, xoffset)
         aList2 = self.getIconList(p)
         aList2.extend(aList)
         self.setIconList(p, aList2)
@@ -1101,11 +974,9 @@ class EditCommandsClass(BaseEditCommandsClass):
     def insertIconFromFile(self, path, p=None, pos=None, **kargs):
         c = self.c
         if not p: p = c.p
-        iconDir = c.os_path_finalize_join(g.app.loadDir, "..", "Icons")
-        os.chdir(iconDir)
         aList = []
         xoffset = 2
-        xoffset = self.appendImageDictToList(aList, iconDir, path, xoffset, **kargs)
+        xoffset = self.appendImageDictToList(aList, path, xoffset, **kargs)
         aList2 = self.getIconList(p)
         if pos is None: pos = len(aList2)
         aList2.insert(pos, aList[0])
@@ -1258,7 +1129,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         else:
             result = [line[len(ch):] if line.startswith(ch) else line for line in lines]
         result = ''.join(result)
-        # g.trace('add',add,'hasSelection',w.hasSelection(),'result',repr(result))
         if w.hasSelection():
             i, j = w.getSelectionRange()
             w.delete(i, j)
@@ -1645,8 +1515,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         This is the default binding for all keys in the body pane.
         It handles undo, bodykey events, tabs, back-spaces and bracket matching.
         '''
-        trace = False and not g.unitTesting
-        verbose = True
         c, p = self.c, self.c.p
         w = self.editWidget(event)
         if not w:
@@ -1667,8 +1535,7 @@ class EditCommandsClass(BaseEditCommandsClass):
         inBrackets = ch and g.toUnicode(ch) in brackets
         #@-<< set local vars >>
         assert g.isStrokeOrNone(stroke)
-        if trace: g.trace('ch', repr(ch), 'stroke', stroke)
-        if g.doHook("bodykey1", c=c, p=p, v=p, ch=ch, oldSel=oldSel, undoType=undoType):
+        if g.doHook("bodykey1", c=c, p=p, ch=ch, oldSel=oldSel, undoType=undoType):
             return
         if ch == '\t':
             self.updateTab(p, w)
@@ -1678,6 +1545,8 @@ class EditCommandsClass(BaseEditCommandsClass):
         elif ch in ('\r', '\n'):
             ch = '\n'
             self.insertNewlineHelper(w, oldSel, undoType)
+        elif ch in '\'"' and c.config.getBool('smart-quotes'):
+            self.doSmartQuote(action, ch, oldSel, w)
         elif inBrackets and self.autocompleteBrackets:
             self.updateAutomatchBracket(p, w, ch, oldSel)
         elif ch:
@@ -1691,12 +1560,10 @@ class EditCommandsClass(BaseEditCommandsClass):
         # Update the text and handle undo.
         newText = w.getAllText()
         changed = newText != oldText
-        if trace and verbose:
-            g.trace('ch', repr(ch), 'changed', changed, 'newText', repr(newText[-10:]))
         if changed:
             c.frame.body.onBodyChanged(undoType=undoType,
                 oldSel=oldSel, oldText=oldText, oldYview=None)
-        g.doHook("bodykey2", c=c, p=p, v=p, ch=ch, oldSel=oldSel, undoType=undoType)
+        g.doHook("bodykey2", c=c, p=p, ch=ch, oldSel=oldSel, undoType=undoType)
     #@+node:ekr.20160924135613.1: *5* ec.doPlainChar
     def doPlainChar(self, action, ch, event, inBrackets, oldSel, stroke, w):
         c, p = self.c, self.c.p
@@ -1748,6 +1615,29 @@ class EditCommandsClass(BaseEditCommandsClass):
             w.insert(i, ' ' * n)
             ins = i + n
         w.setSelectionRange(ins, ins, insert=ins)
+    #@+node:ekr.20180806045802.1: *5* ec.doSmartQuote
+    def doSmartQuote(self, action, ch, oldSel, w):
+        '''Convert a straight quote to a curly quote, depending on context.'''
+        i, j = oldSel
+        if i > j:
+            i, j = j, i
+        # Use raw insert/delete to retain the coloring.
+        if i != j:
+            w.delete(i, j)
+        elif action == 'overwrite':
+            w.delete(i)
+        ins = w.getInsertPoint()
+        # Pick the correct curly quote.
+        s = w.getAllText() or ""
+        i2 = g.skip_to_start_of_line(s, max(0,ins-1))
+        open_curly = ins == i2 or ins > i2 and s[ins-1] in ' \t'
+            # not s[ins-1].isalnum()
+        if open_curly:
+            ch = '‘' if ch == "'" else "“"
+        else:
+            ch = '’' if ch == "'" else "”"
+        w.insert(ins, ch)
+        w.setInsertPoint(ins + 1)
     #@+node:ekr.20150514063305.271: *5* ec.flashCharacter
     def flashCharacter(self, w, i):
         '''Flash the character at position i of widget w.'''
@@ -1779,23 +1669,16 @@ class EditCommandsClass(BaseEditCommandsClass):
     #@+node:ekr.20150514063305.273: *5* ec.initBracketMatcher
     def initBracketMatcher(self, c):
         '''Init the bracket matching code.'''
-        trace = False and not g.unitTesting
         if len(self.openBracketsList) != len(self.closeBracketsList):
             g.es_print('bad open/close_flash_brackets setting: using defaults')
             self.openBracketsList = '([{'
             self.closeBracketsList = ')]}'
-        if trace:
-            g.trace('self.openBrackets',self.openBracketsList)
-            g.trace('self.closeBrackets',self.closeBracketsList)
     #@+node:ekr.20150514063305.274: *5* ec.insertNewlineHelper
     def insertNewlineHelper(self, w, oldSel, undoType):
-        trace = False and not g.unitTesting
+
         c, p = self.c, self.c.p
         i, j = oldSel
         ch = '\n'
-        if trace:
-            # s = w.widget.toPlainText()
-            g.trace('sel', i, j, g.callers())
         if i != j:
             # No auto-indent if there is selected text.
             w.delete(i, j)
@@ -1814,7 +1697,6 @@ class EditCommandsClass(BaseEditCommandsClass):
     #@+node:ekr.20150514063305.275: *5* ec.updateAutoIndent
     def updateAutoIndent(self, p, w):
         '''Handle auto indentation.'''
-        trace = False and not g.unitTesting
         c = self.c
         tab_width = c.getTabWidth(p)
         # Get the previous line.
@@ -1825,7 +1707,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         s = s[i: j - 1]
         # Add the leading whitespace to the present line.
         junk, width = g.skip_leading_ws_with_indent(s, 0, tab_width)
-        # g.trace('width',width,'tab_width',tab_width)
         if s and s[-1] == ':':
             # For Python: increase auto-indent after colons.
             if g.findLanguageDirectives(c, p) == 'python':
@@ -1834,18 +1715,16 @@ class EditCommandsClass(BaseEditCommandsClass):
             # Determine if prev line has unclosed parens/brackets/braces
             bracketWidths = [width]
             tabex = 0
-            for i in range(0, len(s)):
-                if s[i] == '\t':
+            for i, ch in enumerate(s):
+                if ch == '\t':
                     tabex += tab_width - 1
-                if s[i] in '([{':
+                if ch in '([{':
                     bracketWidths.append(i + tabex + 1)
-                elif s[i] in '}])' and len(bracketWidths) > 1:
+                elif ch in '}])' and len(bracketWidths) > 1:
                     bracketWidths.pop()
             width = bracketWidths.pop()
         ws = g.computeLeadingWhitespace(width, tab_width)
         if ws:
-            if trace: g.trace('width: %s, tab_width: %s, ws: %s' % (
-                width, tab_width, repr(ws)))
             i = w.getInsertPoint()
             w.insert(i, ws)
             w.setInsertPoint(i + len(ws))
@@ -1853,7 +1732,7 @@ class EditCommandsClass(BaseEditCommandsClass):
                 # 2011/10/02: Fix cursor-movement bug.
     #@+node:ekr.20150514063305.276: *5* ec.updateAutomatchBracket
     def updateAutomatchBracket(self, p, w, ch, oldSel):
-        # assert ch in ('(',')','[',']','{','}')
+
         c = self.c
         d = c.scanAllDirectives(p)
         i, j = oldSel
@@ -1881,7 +1760,6 @@ class EditCommandsClass(BaseEditCommandsClass):
     #@+node:ekr.20150514063305.277: *5* ec.updateTab
     def updateTab(self, p, w, smartTab=True):
         '''Add spaces equivalent to a tab.'''
-        trace = False and not g.unitTesting
         c = self.c
         i, j = w.getSelectionRange()
             # Returns insert point if no selection, with i <= j.
@@ -1899,10 +1777,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             doSmartTab = (smartTab and c.smart_tab and i == start)
                 # Truly at the start of the line.
                 # and not after # Nothing *at all* after the cursor.
-            if trace:
-                g.trace('smartTab: %s,tab_width: %s, c.tab_width: %s' % (
-                    doSmartTab, tab_width, c.tab_width))
-                    # 'i %s start %s after %s' % (i,start,repr(after)))
             if doSmartTab:
                 self.updateAutoIndent(p, w)
                 # Add a tab if otherwise nothing would happen.
@@ -2004,35 +1878,27 @@ class EditCommandsClass(BaseEditCommandsClass):
         extend: Clear the selection unless this is True.
         spot:   The *new* insert point.
         '''
-        trace = False and not g.unitTesting
-        verbose = True
         c, p = self.c, self.c.p
         extend = extend or self.extendMode
         ins = w.getInsertPoint()
         i, j = w.getSelectionRange()
-        if trace: g.trace(
-            'extend', extend, 'ins', ins, 'sel=', i, j,
-            'spot=', spot, 'moveSpot', self.moveSpot)
         # Reset the move spot if needed.
         if self.moveSpot is None or p.v != self.moveSpotNode:
             self.setMoveCol(w, ins if extend else spot) # sets self.moveSpot.
-            if trace: g.trace('no spot: new moveCol', self.moveCol)
         elif extend:
             # 2011/05/20: Fix bug 622819
             # Ctrl-Shift movement is incorrect when there is an unexpected selection.
             if i == j:
-                if trace: g.trace('extend and no sel')
                 self.setMoveCol(w, ins) # sets self.moveSpot.
             elif self.moveSpot in (i, j) and self.moveSpot != ins:
-                if trace and verbose: g.trace('extend and movespot matches')
                 # The bug fix, part 1.
+                pass
             else:
                 # The bug fix, part 2.
                 # Set the moveCol to the *not* insert point.
                 if ins == i: k = j
                 elif ins == j: k = i
                 else: k = ins
-                if trace: g.trace('extend and unexpected spot', k)
                 self.setMoveCol(w, k) # sets self.moveSpot.
         else:
             if upOrDown:
@@ -2044,19 +1910,15 @@ class EditCommandsClass(BaseEditCommandsClass):
                     n = min(self.moveCol, max(0, len(line) - 1))
                 else:
                     n = min(self.moveCol, max(0, len(line))) # A tricky boundary.
-                # g.trace('using moveCol',self.moveCol,'line',repr(line),'n',n)
                 spot = g.convertRowColToPythonIndex(s, row, n)
             else: # Plain move forward or back.
-                # g.trace('plain forward/back move')
                 self.setMoveCol(w, spot) # sets self.moveSpot.
         if extend:
-            if trace: g.trace('range', 'spot:', spot, 'moveSpot', self.moveSpot)
             if spot < self.moveSpot:
                 w.setSelectionRange(spot, self.moveSpot, insert=spot)
             else:
                 w.setSelectionRange(self.moveSpot, spot, insert=spot)
         else:
-            if trace: g.trace('insert point', spot)
             w.setSelectionRange(spot, spot, insert=spot)
         w.seeInsertPoint()
         c.frame.updateStatusLine()
@@ -2169,7 +2031,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         def seek_special_start(i):
             return seek_until_changed(i, is_special, -1)
         #@-others
-        # g.trace('smart',smart,'forward',forward,'end',end)
         if smart:
             if forward:
                 if 0 <= i < n:
@@ -2320,7 +2181,7 @@ class EditCommandsClass(BaseEditCommandsClass):
         self.moveUpOrDownHelper(event, 'up', extend=True)
     #@+node:ekr.20150514063305.293: *5* ec.moveUpOrDownHelper
     def moveUpOrDownHelper(self, event, direction, extend):
-        trace = False and not g.unitTesting
+
         w = self.editWidget(event)
         if not w:
             return
@@ -2333,17 +2194,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         else:
             # Find the start of the next/prev line.
             row, col = g.convertPythonIndexToRowCol(s, ins)
-            if trace:
-                gui_ins = w.toPythonIndex(ins)
-                bbox = w.bbox(gui_ins)
-                if bbox:
-                    x, y, width, height = bbox
-                    # bbox: x,y,width,height:  dlineinfo: x,y,width,height,offset
-                    g.trace('gui_ins', gui_ins, 'dlineinfo', w.dlineinfo(gui_ins), 'bbox', bbox)
-                    g.trace('ins', ins, 'row', row, 'col', col,
-                        'event.x', event and event.x, 'event.y', event and event.y)
-                    g.trace('subtracting line height', w.index('@%s,%s' % (x, y - height)))
-                    g.trace('adding      line height', w.index('@%s,%s' % (x, y + height)))
             i, j = g.getLine(s, ins)
             if direction == 'down':
                 i2, j2 = g.getLine(s, j)
@@ -2353,7 +2203,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             n = max(0, j2 - i2 - 1) # The length of the new line.
             col2 = min(col, n)
             spot = i2 + col2
-            if trace: g.trace('spot', spot, 'n', n, 'col', col, 'line', repr(s[i2: j2]))
             self.extendHelper(w, extend, spot, upOrDown=True)
     #@+node:ekr.20150514063305.294: *4* ec.buffers & helper
     @cmd('beginning-of-buffer')
@@ -2660,7 +2509,6 @@ class EditCommandsClass(BaseEditCommandsClass):
     #@+node:ekr.20150514063305.307: *5* ec.movePageHelper
     def movePageHelper(self, event, kind, extend): # kind in back/forward.
         '''Move the cursor up/down one page, possibly extending the selection.'''
-        trace = False and not g.unitTesting
         w = self.editWidget(event)
         if not w:
             return
@@ -2681,7 +2529,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             row2 = max(0, row - linesPerPage) if kind == 'back' else min(row + linesPerPage, len(lines) - 1)
             if row == row2: return
             spot = g.convertRowColToPythonIndex(s, row2, col, lines=lines)
-            if trace: g.trace('spot', spot, 'row2', row2)
             self.extendHelper(w, extend, spot, upOrDown=True)
     #@+node:ekr.20150514063305.308: *4* ec.paragraphs & helpers
     @cmd('back-paragraph')
@@ -3236,7 +3083,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             assert way == 'toggle'
             sel = s2.swapcase()
         s2 = s[: i] + sel + s[j:]
-        # g.trace('sel',repr(sel),'s2',repr(s2))
         changed = s2 != s
         if changed:
             w.setAllText(s2)
@@ -3460,10 +3306,8 @@ class EditCommandsClass(BaseEditCommandsClass):
     @cmd('sort-lines')
     def sortLines(self, event, ignoreCase=False, reverse=False):
         '''Sort the selected lines.'''
-        trace = False and not g.unitTesting
         w = self.editWidget(event)
         if not self._chckSel(event):
-            if trace: g.trace('early return')
             return
         undoType = 'reverse-sort-lines' if reverse else 'sort-lines'
         self.beginCommand(w, undoType=undoType)
@@ -3485,7 +3329,6 @@ class EditCommandsClass(BaseEditCommandsClass):
             if reverse:
                 aList.reverse()
             s = g.joinLines(aList)
-            if trace: g.trace(s)
             w.delete(i, j)
             w.insert(i, s)
             w.setSelectionRange(sel1, sel2, insert=ins)
@@ -3604,7 +3447,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         Punctuation between words does not move. For example, ‘FOO, BAR’
         transposes into ‘BAR, FOO’.
         '''
-        trace = False and not g.unitTesting
         w = self.editWidget(event)
         if not w: return
         self.beginCommand(w, undoType='transpose-words')
@@ -3612,7 +3454,6 @@ class EditCommandsClass(BaseEditCommandsClass):
         i1, j1 = self.extendToWord(event, select=False)
         s1 = s[i1: j1]
         if i1 > j1: i1, j1 = j1, i1
-        if trace: g.trace('word1', s[i1:j1])
         # Search for the next word.
         k = j1 + 1
         while k < len(s) and s[k] != '\n' and not g.isWordChar1(s[k]):
@@ -3620,11 +3461,9 @@ class EditCommandsClass(BaseEditCommandsClass):
         changed = k < len(s)
         if changed:
             ws = s[j1: k]
-            if trace: g.trace('ws', repr(ws))
             w.setInsertPoint(k + 1)
             i2, j2 = self.extendToWord(event, select=False)
             s2 = s[i2: j2]
-            if trace: g.trace('word2', s2)
             s3 = s[: i1] + s2 + ws + s1 + s[j2:]
             w.setAllText(s3)
             w.setSelectionRange(j1, j1, insert=j1)
@@ -3659,7 +3498,7 @@ class EditCommandsClass(BaseEditCommandsClass):
         for v in self.c.all_unique_nodes():
             v.u = {}
     #@+node:ekr.20150514063305.350: *4* ec.printUas & printAllUas
-    @cmd('print-all-uas')
+    @cmd('show-all-uas')
     def printAllUas(self, event=None):
         '''Print all uA's in the outline.'''
         g.es_print('Dump of uAs...')
@@ -3667,21 +3506,14 @@ class EditCommandsClass(BaseEditCommandsClass):
             if v.u:
                 self.printUas(v=v)
 
-    @cmd('print-node-uas')
+    @cmd('show-node-uas')
     def printUas(self, event=None, v=None):
         '''Print the uA's in the selected node.'''
         c = self.c
         if v: d, h = v.u, v.h
         else: d, h = c.p.v.u, c.p.h
-        g.es_print(h)
-        keys = list(d.keys())
-        keys.sort()
-        n = 4
-        for key in keys:
-            n = max(len(key), n)
-        for key in keys:
-            pad = ' ' * (len(key) - n)
-            g.es_print('    %s%s: %s' % (pad, key, d.get(key)))
+        print(h)
+        g.printObj(d)
     #@+node:ekr.20150514063305.351: *4* ec.setUa
     @cmd('set-ua')
     def setUa(self, event):
@@ -3709,5 +3541,130 @@ class EditCommandsClass(BaseEditCommandsClass):
         k.resetLabel()
         k.showStateAndMode()
     #@-others
+#@+node:ekr.20180210160930.1: ** @g.command('mark-first-parents')
+@g.command('mark-first-parents')
+def mark_first_parents(event):
+    '''Mark the node and all its parents.'''
+    c = event.get('c')
+    if not c:
+        return
+    changed = []
+    for parent in c.p.self_and_parents():
+        if not parent.isMarked():
+            parent.v.setMarked()
+            parent.setAllAncestorAtFileNodesDirty()
+            changed.append(parent.copy())
+    if changed:
+        # g.es("marked: " + ', '.join([z.h for z in changed]))
+        c.setChanged()
+        c.redraw()
+    return changed
+#@+node:ekr.20180210161001.1: ** @g.command('unmark-first-parents')
+@g.command('unmark-first-parents')
+def unmark_first_parents(event=None):
+    '''Mark the node and all its parents.'''
+    c = event.get('c')
+    if not c:
+        return
+    changed = []
+    for parent in c.p.self_and_parents():
+        if parent.isMarked():
+            parent.v.clearMarked()
+            parent.setAllAncestorAtFileNodesDirty()
+            changed.append(parent.copy())
+    if changed:
+        # g.es("unmarked: " + ', '.join([z.h for z in changed]))
+        c.setChanged()
+        c.redraw()
+    return changed
+#@+node:ekr.20180504180844.1: ** Top-level helper functions
+#@+node:ekr.20180504180247.2: *3* find_next_trace
+if_pat = re.compile(r'\n[ \t]*(if|elif)\s*trace\b.*:')
+    # Will not find in comments, which is fine.
+    
+skip_pat = re.compile(r'=.*in g.app.debug')
+
+def find_next_trace(ins, p):
+    while p:
+        ins = max(0, ins-1) # Back up over newline.
+        s = p.b[ins:]
+        m = re.search(skip_pat, s)
+        if m:
+            # Skip this node.
+            g.es_print('Skipping', p.h)
+        else:
+            m = re.search(if_pat, s)
+            if m:
+                i = m.start()+1
+                j = m.end()
+                k = find_trace_block(i, j, s)
+                i += ins
+                k += ins
+                return i, k, p
+        p.moveToThreadNext()
+        ins = 0
+    return None, None, p
+#@+node:ekr.20180504180247.3: *3* find_trace_block
+def find_trace_block(i, j, s):
+    '''Find the statement or block starting at i.'''
+    assert s[i] != '\n'
+    s = s[i:]
+    lws = len(s) - len(s.lstrip())
+    n = 1 # Number of lines to skip.
+    lines = g.splitLines(s)
+    for line in lines[1:]:
+        lws2 = len(line) - len(line.lstrip())
+        if lws2 <= lws:
+            break
+        n += 1
+    assert n >= 1
+    result_lines = lines[:n]
+    return i + len(''.join(result_lines))
+#@+node:ekr.20180504180134.1: ** @g.command('delete-trace-statements')
+@g.command('delete-trace-statements')
+def delete_trace_statements(event=None):
+    '''
+    Delete all trace statements/blocks from c.p to the end of the outline.
+    
+    **Warning**: Use this command at your own risk.
+    
+    It can cause "if" and "else" clauses to become empty, resulting in
+    syntax errors. Having said that, pyflakes & pylint will usually catch
+    the problems.
+    '''
+    c = event.get('c')
+    if not c:
+        return
+    p = c.p
+    ins = 0
+    seen = []
+    while True:
+        i, k, p = find_next_trace(ins, p)
+        if not p:
+            g.es_print('done')
+            return
+        s = p.b
+        if p.h not in seen:
+            seen.append(p.h)
+            g.es_print('Changed:', p.h)
+        ins = 0 # Rescanning is essential.
+        p.b = s[:i] + s[k:]
+#@+node:ekr.20180504180647.1: ** @g.command('select-next-trace-statement')
+@g.command('select-next-trace-statement')
+def select_next_trace_statement(event=None):
+    '''Select the next statement/block enabled by "if trace...:"'''
+    c = event.get('c')
+    if not c:
+        return
+    w = c.frame.body.wrapper
+    ins = w.getInsertPoint()
+    i, k, p = find_next_trace(ins, c.p)
+    if p:
+        c.selectPosition(p)
+        c.redraw()
+        w.setSelectionRange(i, k, insert=k)
+    else:
+        g.es_print('done')
+    c.bodyWantsFocus()
 #@-others
 #@-leo

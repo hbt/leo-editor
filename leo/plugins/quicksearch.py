@@ -162,7 +162,6 @@ def install_qt_quicksearch_tab(c):
             wdg.ui.lineEdit.setText(text)
             wdg.returnPressed()
             focus_to_nav(event)
-
         else:
             focus_quicksearch_entry(event)
 
@@ -179,7 +178,8 @@ def install_qt_quicksearch_tab(c):
         wdg.scon.doTimeline()
 
     c.k.registerCommand('find-quick', focus_quicksearch_entry)
-    c.k.registerCommand('find-quick-selected', find_selected, shortcut='Ctrl-Shift-f')
+    c.k.registerCommand('find-quick-selected', find_selected)
+        ### , shortcut='Ctrl-Shift-f')
     c.k.registerCommand('focus-to-nav', focus_to_nav)
     c.k.registerCommand('find-quick-test-failures', show_unittest_failures)
     c.k.registerCommand('find-quick-timeline', timeline)
@@ -264,13 +264,11 @@ class QuickSearchEventFilter(QtCore.QObject):
     #@+node:ekr.20111015194452.15719: *3* eventFilter
     def eventFilter(self,obj,event):
 
-        # g.trace()
         eventType = event.type()
         ev = QtCore.QEvent
         # QLineEdit generates ev.KeyRelease only on Windows,Ubuntu
         # kinds = [ev.KeyPress,ev.KeyRelease]
         if eventType == ev.KeyRelease:
-            #print "key event"
             lw = self.listWidget
             k = event.key()
             moved = False
@@ -283,12 +281,9 @@ class QuickSearchEventFilter(QtCore.QObject):
             if k == QtConst.Key_Return:
                 lw.setCurrentRow(lw.currentRow()+1)
                 moved = True
-
             if moved:
                 self.lineEdit.setFocus(True)
                 self.lineEdit.deselect()
-            #self.w.onKeyPress(event)
-
         return False
     #@-others
 #@+node:ville.20121223213319.3670: ** dumpfocus (quicksearch.py)
@@ -316,30 +311,13 @@ class LeoQuickSearchWidget(QtWidgets.QWidget):
         u = self.ui
         cc = QuickSearchController(c,w,u)
         self.scon = cc
-
         if mode == "popout":
             self.setWindowTitle("Go anywhere")
-            if 1:
-                self.ui.lineEdit.returnPressed.connect(self.selectAndDismiss)
-            # else:
-                # self.connect(self.ui.lineEdit,
-                    # QtCore.SIGNAL("returnPressed()"),
-                    # self.selectAndDismiss)
+            self.ui.lineEdit.returnPressed.connect(self.selectAndDismiss)
             threadutil.later(self.ui.lineEdit.setFocus)
         else:
-            if 1:
-                self.ui.lineEdit.returnPressed.connect(self.returnPressed)
-            # else:
-                # self.connect(self.ui.lineEdit,
-                    # QtCore.SIGNAL("returnPressed()"),
-                    # self.returnPressed)
-        if 1:
-            self.ui.lineEdit.textChanged.connect(self.liveUpdate)
-        # else:
-            # self.connect(self.ui.lineEdit,
-                # QtCore.SIGNAL("textChanged(QString)"),
-                # self.liveUpdate)
-
+            self.ui.lineEdit.returnPressed.connect(self.returnPressed)
+        self.ui.lineEdit.textChanged.connect(self.liveUpdate)
         self.ev_filter = QuickSearchEventFilter(c,w, self.ui.lineEdit)
         self.ui.lineEdit.installEventFilter(self.ev_filter)
         self.c = c
@@ -350,14 +328,13 @@ class LeoQuickSearchWidget(QtWidgets.QWidget):
         t = g.u(self.ui.lineEdit.text())
         if not t.strip():
             return
-
         if t == g.u('m'):
             self.scon.doShowMarked()
         elif t == g.u('h'):
             self.scon.doSearchHistory()
         else:
             self.scon.doSearch(t)
-
+        #
         if self.scon.its:
             self.ui.listWidget.blockSignals(True) # don't jump to first hit
             self.ui.listWidget.setFocus()
@@ -365,7 +342,6 @@ class LeoQuickSearchWidget(QtWidgets.QWidget):
 
     def selectAndDismiss(self):
         self.hide()
-
     #@+node:ville.20121118193144.3622: *3* liveUpdate
     def liveUpdate(self):
 
@@ -583,6 +559,7 @@ class QuickSearchController(object):
         self.addHeadlineMatches(changed)
     #@+node:ekr.20111015194452.15692: *3* doSearch
     def doSearch(self, pat):
+
         hitBase = False
         self.clear()
         self.pushSearchHistory(pat)
@@ -706,9 +683,11 @@ class QuickSearchController(object):
         """ Return list (a PosList) of all nodes where zero or more characters at
         the beginning of the headline match regex
         """
-
-        pat = re.compile(regex, flags)
         res = leoNodes.PosList()
+        try:
+            pat = re.compile(regex, flags)
+        except Exception:
+            return res
         for p in nodes:
             m = re.match(pat, p.h)
             if m:
@@ -722,8 +701,11 @@ class QuickSearchController(object):
         one or more times.
 
         """
-        pat = re.compile(regex, flags)
         res = leoNodes.PosList()
+        try:
+            pat = re.compile(regex, flags)
+        except Exception:
+            return res
         for p in nodes:
             m = re.finditer(pat, p.b)
             t1, t2 = itertools.tee(m, 2)

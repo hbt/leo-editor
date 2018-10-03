@@ -611,51 +611,72 @@ class BookMarkDisplay(object):
 
     Bookmark = namedtuple('Bookmark', 'head url ancestors siblings children v')
 
+    # modifier to string mapping
+    ModMap = {
+        int(QtCore.Qt.NoModifier): 'None',
+        int(QtCore.Qt.AltModifier): 'Alt',
+        int(QtCore.Qt.AltModifier | QtCore.Qt.ControlModifier): 'AltControl',
+        int(QtCore.Qt.AltModifier | QtCore.Qt.ControlModifier | \
+            QtCore.Qt.ShiftModifier): 'AltControlShift',
+        int(QtCore.Qt.AltModifier | QtCore.Qt.ShiftModifier): 'AltShift',
+        int(QtCore.Qt.ControlModifier): 'Control',
+        int(QtCore.Qt.ControlModifier | QtCore.Qt.ShiftModifier): 'ControlShift',
+        int(QtCore.Qt.ShiftModifier): 'Shift'
+    }
+
     #@+others
-    #@+node:tbrown.20110712100955.18926: *3* __init__
+    #@+node:tbrown.20110712100955.18926: *3* __init__ & reloadSettings (BookMarkDisplay)
     def __init__(self, c, v=None):
 
         self.c = c
         c._bookmarks = self
-
         # self.v - where the bookmarks for c are kept, may not be in c
         if v is None:
             v = self.v = c.p.v
         else:
             self.v = v
-
         self.current = None  # current (last used) bookmark
         self.previous = None  # position in outline, for outline / bookmarks switch
-
         self.levels = c.config.getInt('bookmarks-levels') or 1
         # levels to show in hierarchical display
         self.second = False  # second click of current bookmark?
         self.upwards = False  # moving upwards through hierarchy
-
         self.w = QtWidgets.QWidget()
-
-        self.dark = c.config.getBool("color_theme_is_dark")
-
+        self.reloadSettings()
         # stuff for pane persistence
         self.w._ns_id = '_leo_bookmarks_show:'
         # v might not be in this outline
         c.db['_leo_bookmarks_show'] = v.context.vnode2position(v).get_UNL()
-
         # else:
             # c.frame.log.createTab(c.p.h[:10])
             # tabWidget = c.frame.log.tabWidget
             # self.w = tabWidget.widget(tabWidget.count()-1)
-
         self.w.setObjectName('show_bookmarks')
         self.w.setMinimumSize(10, 10)
         self.w.setLayout(QtWidgets.QVBoxLayout())
         self.w.layout().setContentsMargins(0,0,0,0)
-
         self.current_list = self.get_list()
-
         self.show_list(self.current_list)
-
         g.registerHandler('select1', self.update)
+
+    def reloadSettings(self):
+        c = self.c
+        c.registerReloadSettings(self)
+        self.dark = c.config.getBool("color_theme_is_dark")
+        mod_map = c.config.getData("bookmarks-modifiers")
+        if not mod_map:
+            mod_map = """
+                None goto_bookmark
+                AltControl update_bookmark
+                ControlShift rename_bookmark
+                Alt edit_bookmark
+                Control delete_bookmark
+                Shift add_child
+                AlfShift navigate
+                AltControlShift hoist
+            """.split('\n')
+        self.mod_map = dict(i.strip().split() for i in mod_map if i.strip())
+
 
     #@+node:tbrown.20131227100801.30379: *3* background_clicked
     def background_clicked(self, event, bookmarks, row_parent):
@@ -689,35 +710,27 @@ class BookMarkDisplay(object):
         if event.button() == QtCore.Qt.RightButton:
             return self.button_menu(event, bm, but, up=up)
 
-        mods = event.modifiers()
+        action_name = self.mod_map.get(self.ModMap.get(int(event.modifiers())))
+        if action_name is None:
+            g.es("Bookmarks: unknown click type")
+            print(int(event.modifiers()))
+            for k, v in self.ModMap.items():
+                print(k, v)
+            for k, v in self.mod_map.items():
+                print(k, v)
+            return
 
-        # Alt-Ctrl => update bookmark to point to current node
-        if mods == (QtCore.Qt.AltModifier | QtCore.Qt.ControlModifier):
-            self.update_bookmark(bm)
+        if action_name in ('update_bookmark', 'rename_bookmark',
+            'edit_bookmark', 'delete_bookmark', 'promote_bookmark'):
+            # simple bookmark actions
+            getattr(self, action_name)(bm)
             return
-        # Shift-Ctrl => rename bookmark
-        if mods == (QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier):
-            self.rename_bookmark(bm)
-            return
-        # Alt => edit the bookmark in the outline
-        if mods == QtCore.Qt.AltModifier:
-            self.edit_bookmark(bm)
-            return
-        # Ctrl => delete the bookmark
-        if mods == QtCore.Qt.ControlModifier:
-            self.delete_bookmark(bm)
-            return
-        # Shift => add child bookmark
-        if mods == QtCore.Qt.ShiftModifier:
+        elif action_name == 'add_child':
             cmd_bookmark_child(event={'c': bm.v.context})
             return
 
-        # Alt-Shift => navigate in bookmarks without changing nodes
-        no_move = mods == (QtCore.Qt.AltModifier | QtCore.Qt.ShiftModifier)
-
-        # Alt-Control-Shift => hoist outline after going to node
-        hoist = mods == (QtCore.Qt.AltModifier | QtCore.Qt.ControlModifier |
-            QtCore.Qt.ShiftModifier)
+        no_move = action_name == 'navigate'
+        hoist = action_name == 'hoist'
 
         # otherwise, look up the bookmark
         self.upwards = up
@@ -751,10 +764,11 @@ class BookMarkDisplay(object):
         menu = QtWidgets.QMenu()
 
         actions = [
-            ("Link bookmark to this node", self.update_bookmark),
-            ("Re-name bookmark", self.rename_bookmark),
-            ("Edit bookmark in tree", self.edit_bookmark),
-            ("Delete bookmark", self.delete_bookmark),
+            ("Link to this node", self.update_bookmark),
+            ("Promote", self.promote_bookmark),
+            ("Re-name", self.rename_bookmark),
+            ("Edit in tree", self.edit_bookmark),
+            ("Delete", self.delete_bookmark),
             ("Add this node as child bookmark",
                 lambda e: cmd_bookmark_child(event={'c': bm.v.context})),
             ("Add bookmark folder",
@@ -994,7 +1008,7 @@ class BookMarkDisplay(object):
                         todo.append(bm.children)
                         row_parent = bm.v
 
-                if bm.v.u['__bookmarks']['is_dupe']:
+                if bm.v.u['__bookmarks'].get('is_dupe'):
                     style_sheet = "background: red; color: white;"
                 else:
                     style_sheet = ("background: #%s;" %
@@ -1082,7 +1096,17 @@ class BookMarkDisplay(object):
 
         self.show_list(self.get_list())
 
-    #@+node:tbrown.20140804215436.30052: *3* rename_bookmark
+    #@+node:tbrown.20140804215436.30052: *3* promote_bookmark
+    def promote_bookmark(self, bm):
+        """Promote bookmark"""
+        p = bm.v.context.vnode2position(bm.v)
+        p.moveToFirstChildOf(p.parent())
+        bm.v.setDirty()
+        bm.v.context.setChanged(True)
+        bm.v.context.redraw()
+        bm.v.context.bodyWantsFocusNow()
+        self.show_list(self.get_list())
+    #@+node:tbrown.20171128173307.1: *3* rename_bookmark
     def rename_bookmark(self, bm):
         """Rename bookmark"""
 

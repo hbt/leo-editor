@@ -36,9 +36,6 @@ Settings
 ``@string vim_exe``
     The path to the gvim executable.
 
-``vim_plugin_positions_cursor``
-    True: Leo will put Vim cursor at same location as Leo cursor in file.
-
 ``vim_plugin_uses_tab_feature``
     True: Leo will put the node or file in a Vim tab card.
 
@@ -225,7 +222,6 @@ class VimCommander(object):
         # compute settings.
         getBool, getString = c.config.getBool, c.config.getString
         self.open_url_nodes = getBool('vim_plugin_opens_url_nodes')
-        self.position_cursor = getBool('vim_plugin_positions_cursor')
         self.trace = False or getBool('vim_plugin_trace')
         self.uses_tab = getBool('vim_plugin_uses_tab_feature')
         self.vim_cmd = getString('vim_cmd') or _vim_cmd
@@ -244,7 +240,6 @@ class VimCommander(object):
     #@+node:ekr.20120315101404.9746: *3* vim.open_in_vim & helpers
     def open_in_vim(self):
         '''Open p in vim, or the entire enclosing file if entire_file is True.'''
-        trace = (False or self.trace) and not g.unitTesting
         p = self.c.p
         if not self.check_args():
             return
@@ -253,13 +248,11 @@ class VimCommander(object):
             return
         path = self.find_path_for_node(root)
         if path and self.should_open_old_file(path, root):
-            if trace: g.trace('old file:', path)
             cmd = self.vim_cmd + "--remote-send '<C-\\><C-N>:e " + path + "<CR>'"
             if self.trace: g.trace('os.system(%s)' % cmd)
             os.system(cmd)
         else:
             # Open a new temp file.
-            if trace: g.trace('new file:', path)
             if path: self.forget_path(path)
             self.open_file(root)
     #@+node:ekr.20150326183613.1: *4* vim.check_args & helper
@@ -304,7 +297,6 @@ class VimCommander(object):
         - Remove the path from the list of open-with files.
         - Send a command to vim telling it to close the path.
         '''
-        trace = (False or self.trace) and not g.unitTesting
         assert path
         # Don't do this: it prevents efc from reopening paths.
             # efc = g.app.externalFilesController
@@ -313,43 +305,42 @@ class VimCommander(object):
             if g.os_path_exists(path):
                 os.remove(path)
         cmd = self.vim_cmd + "--remote-send '<C-\\><C-N>:bd " + path + "<CR>'"
-        if trace: g.trace('os.system(%s)' % cmd)
         os.system(cmd)
     #@+node:ekr.20150326181247.1: *4* vim.get_cursor_arg
     def get_cursor_arg(self):
         '''Compute the cursor argument for vim.'''
-        if self.position_cursor:
-            wrapper = self.c.frame.body.wrapper
-            s = wrapper.getAllText()
-            ins = wrapper.getInsertPoint()
-            row, col = g.convertPythonIndexToRowCol(s, ins)
-            return "+" + str(row + 1)
-        else:
-            return ''
+        wrapper = self.c.frame.body.wrapper
+        s = wrapper.getAllText()
+        ins = wrapper.getInsertPoint()
+        row, col = g.convertPythonIndexToRowCol(s, ins)
+        return "+" + str(row + 1)
+            # This is an Ex command, not a normal Vim command.  See:
+            # http://vimdoc.sourceforge.net/htmldoc/remote.html
+            # and
+            # http://pubs.opengroup.org/onlinepubs/9699919799/utilities/ex.html#tag_20_40_13_02
     #@+node:ekr.20150326180928.1: *4* vim.open_file
     def open_file(self, root):
         '''Open the the file in vim using c.openWith.'''
-        trace = (False or self.trace) and not g.unitTesting
         c = self.c
         efc = g.app.externalFilesController
         # Common arguments.
-        if trace: g.trace(self.entire_file, root.h)
-        # cursor_arg = self.get_cursor_arg()
         tab_arg = "-tab" if self.uses_tab else ""
         remote_arg = "--remote" + tab_arg + "-silent"
         args = [self.vim_exe, "--servername", "LEO", remote_arg] # No cursor arg.
         if self.entire_file:
             # vim-open-file
+            args.append('+0') # Go to first line of the file. This is an Ex command.
             assert root.isAnyAtFileNode(), root
             dir_ = g.setDefaultDirectory(c, root)
             fn = c.os_path_finalize_join(dir_, root.anyAtFileNodeName())
         else:
             # vim-open-node
+            args.append(self.get_cursor_arg())
+                # Set the cursor position to the current line in the node.
             ext = 'txt'
             fn = efc.create_temp_file(c, ext, c.p)
         c_arg = '%s %s' % (' '.join(args), fn)
         command = 'subprocess.Popen(%s,shell=True)' % c_arg
-        if trace: g.trace(command)
         try:
             subprocess.Popen(c_arg, shell=True)
         except OSError:

@@ -83,7 +83,7 @@ if isQt5:
         from PyQt5.QtCore import QString
     except ImportError:
         QString = str
-    from PyQt5.QtGui import QFont,QIcon,QTextCharFormat
+    from PyQt5.QtGui import QFont,QTextCharFormat # QIcon
     from PyQt5.QtWidgets import (
         QAction,QInputDialog,QLineEdit,QMainWindow,QMdiArea,QTextEdit)
             # QPlainTextEdit,
@@ -93,7 +93,7 @@ else:
         from PyQt4.QtCore import QString
     except ImportError:
         QString = str
-    from PyQt4.QtGui import QAction,QFont,QIcon,QTextCharFormat,QTextEdit
+    from PyQt4.QtGui import QAction,QFont,QTextCharFormat,QTextEdit # QIcon
     from PyQt4.QtGui import QInputDialog,QMainWindow,QMdiArea,QLineEdit
         # QPlainTextEdit,
 #@-<< imports >>
@@ -101,7 +101,8 @@ else:
 #@+node:vivainio2.20091008140054.14555: ** decorate_window
 def decorate_window(c, w):
     w.setStyleSheet(c.styleSheetManager.get_master_widget().styleSheet())
-    w.setWindowIcon(QIcon(g.app.leoDir + "/Icons/leoapp32.png"))
+    g.app.gui.attachLeoIcon(w)
+        ### w.setWindowIcon(QIcon(g.app.leoDir + "/Icons/leoapp32.png"))
     w.resize(600, 300)
 #@+node:vivainio2.20091008133028.5824: ** init
 def init ():
@@ -613,31 +614,32 @@ class Tabula(QMainWindow):
     def closeEvent(self,event):
 
         self.save_states()
-        g.trace(event)
         event.accept() # EKR: doesn't help: we don't get the event.
-
     #@+node:ekr.20101114061906.5444: *4* create_actions (has all toolbar commands!)
     def create_actions(self):
 
         self.tb = self.addToolBar("toolbar")
         self.tb.setObjectName("toolbar")
         #self.addToolBar(Qt.BottomToolBarArea, self.tb)
+
         def do_tile():
             self.mdi.setViewMode(QMdiArea.SubWindowView)
             self.mdi.tileSubWindows()
+        
         def do_cascade():
             self.mdi.setViewMode(QMdiArea.SubWindowView)
             self.mdi.cascadeSubWindows()
+            
         def do_un_tab():
             if self.mdi.viewMode() == QMdiArea.SubWindowView:
                 self.mdi.setViewMode(QMdiArea.TabbedView)
             else:
                 self.mdi.setViewMode(QMdiArea.SubWindowView)
+
         def do_close_all():
             for i in self.mdi.subWindowList():
                 self.mdi.removeSubWindow(i)
             self.notes = {}
-
 
         def do_go():
             p, _ = self.get_current_pos()
@@ -651,8 +653,9 @@ class Tabula(QMainWindow):
 
         def do_edit_h():
             p, w = self.get_current_pos()
-
-            new, r = QInputDialog.getText(None, "Edit headline", "", QLineEdit.Normal, p.h)
+            new, r = QInputDialog.getText(None,
+                "Edit headline", "", 
+                QLineEdit.Normal, p.h)
             if not r:
                 return
             new = g.u(new)
@@ -674,10 +677,10 @@ class Tabula(QMainWindow):
     #@+node:ekr.20101114061906.5440: *4* load_states
     def load_states(self):
 
-        if not self.c.cacher.db:
+        if not self.c.db:
             return
         try:
-            stored = self.c.cacher.db['tabulanotes']
+            stored = self.c.db['tabulanotes']
         except KeyError:
             return
 
@@ -700,7 +703,6 @@ class Tabula(QMainWindow):
     #@+node:ekr.20101114061906.5446: *4* on_quit
     def on_quit(self,tag, kw):
 
-        g.trace(tag,kw,self)
         # saving when hidden nukes all
 
         if self.isVisible():
@@ -726,16 +728,33 @@ class Tabula(QMainWindow):
 
     #@+node:ekr.20101114061906.5441: *4* save_states
     def save_states(self):
+        
+        self.update_notes()
 
         # n.parent() because the wrapper QMdiSubWindow holds the geom relative to parent
-        geoms = dict(
+        geoms = dict (
             (gnx, n.parent().saveGeometry())
                 for (gnx, n) in self.notes.items() if n.isVisible())
 
         geoms['mainwindow'] = self.saveState()
 
-        if self.c.cacher.db:
-            self.c.cacher.db['tabulanotes'] = geoms
+        if self.c.db:
+            self.c.db['tabulanotes'] = geoms
+    #@+node:ekr.20180822134952.1: *4* update_nodes (new)
+    def update_notes(self):
+        
+        # #940: update self.notes. Ensure note n still exists.
+        visible = []
+        for (gnx, n) in self.notes.items():
+            try:
+                if n.isVisible():
+                    visible.append(gnx)
+            except RuntimeError:
+                pass
+        self.notes = dict (
+            (gnx, n) for (gnx, n) in self.notes.items()
+                if gnx in visible
+        )
     #@-others
 #@-others
 #@@language python

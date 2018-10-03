@@ -112,6 +112,8 @@ if g.app.gui.guiName() == "qt":
             QtWidgets.QWidget.__init__(self)
             uiPath = g.os_path_join(g.app.leoDir, 'plugins', 'ToDo.ui')
             # change dir to get themed icons, needed for uic resources
+            # 20180327 this is working, these are icons for todo UI, not
+            # the tree.
             theme = g.app.config.getString('color_theme')
             if theme:
                 testPath = g.os_path_join(
@@ -369,7 +371,7 @@ class todoController(object):
     _date_fields = ['created', 'date', 'duedate', 'nextworkdate', 'prisetdate']
     _time_fields = ['duetime', 'nextworktime', 'time']
     _datetime_fields = _date_fields + _time_fields
-    #@+node:tbrown.20090119215428.11: *3* __init__
+    #@+node:tbrown.20090119215428.11: *3* __init__ & helper (todoController)
     def __init__ (self,c):
         '''ctor for todoController class.'''
         self.c = c
@@ -380,26 +382,7 @@ class todoController(object):
         #X self.smiley = None
         self.redrawLevels = 0
         self._widget_to_style = None  # see updateStyle()
-        self.iconDir = g.os_path_abspath(g.os_path_normpath(
-            g.os_path_join(g.app.loadDir,"..","Icons")))
-        #@+<< set / read default values >>
-        #@+node:tbrown.20090119215428.12: *4* << set / read default values >>
-        self.time_name = 'days'
-        if c.config.getString('todo_time_name'):
-            self.time_name = c.config.getString('todo_time_name')
-
-        self.icon_location = 'beforeHeadline'
-        if c.config.getString('todo_icon_location'):
-            self.icon_location = c.config.getString('todo_icon_location')
-
-        self.prog_location = 'beforeHeadline'
-        if c.config.getString('todo_prog_location'):
-            self.prog_location = c.config.getString('todo_prog_location')
-
-        self.icon_order = 'pri-first'
-        if c.config.getString('todo_icon_order'):
-            self.icon_order = c.config.getString('todo_icon_order')
-        #@-<< set / read default values >>
+        self.reloadSettings()
         self.handlers = [
            ("close-frame",self.close),
            ('select3', self.updateUI),
@@ -414,9 +397,16 @@ class todoController(object):
         for i in self.handlers:
             g.registerHandler(i[0], i[1])
         self.loadAllIcons()
-
         # correct spinTime suffix:
         self.ui.UI.spinTime.setSuffix(" " + self.time_name)
+    #@+node:tbrown.20090119215428.12: *4* reloadSettings (todoController)
+    def reloadSettings(self):
+        c = self.c
+        c.registerReloadSettings(self)
+        self.time_name = c.config.getString('todo_time_name') or 'days'
+        self.icon_location = c.config.getString('todo_icon_location') or 'beforeHeadline'
+        self.prog_location = c.config.getString('todo_prog_location') or 'beforeHeadline'
+        self.icon_order = c.config.getString('todo_icon_order') or 'pri-first'
     #@+node:tbrown.20090522142657.7894: *3* __del__
     def __del__(self):
         for i in self.handlers:
@@ -504,7 +494,7 @@ class todoController(object):
     def redrawer(fn):
         """decorator for methods which create the need for a redraw"""
         # pylint: disable=no-self-argument
-        def new(self, *args, **kargs):
+        def todo_redrawer_callback(self, *args, **kargs):
             self.redrawLevels += 1
             try:
                 # pylint: disable=not-callable
@@ -514,17 +504,17 @@ class todoController(object):
                 if self.redrawLevels == 0:
                     self.redraw()
             return ans
-        return new
+        return todo_redrawer_callback
     #@+node:tbrown.20090119215428.14: *3* projectChanger
     def projectChanger(fn):
         """decorator for methods which change projects"""
         # pylint: disable=no-self-argument
-        def new(self, *args, **kargs):
+        def project_changer_callback(self, *args, **kargs):
             # pylint: disable=not-callable
             ans = fn(self,*args, **kargs)
             self.update_project()
             return ans
-        return new
+        return project_changer_callback
     #@+node:tbrown.20090119215428.15: *3* loadAllIcons
     @redrawer
     def loadAllIcons(self, tag=None, k=None, clear=None):
@@ -550,8 +540,7 @@ class todoController(object):
                 pri = self.getat(p.v, 'priority')
                 if pri: pri = int(pri)
                 if pri in self.priorities:
-                    com.appendImageDictToList(icons, self.iconDir,
-                        g.os_path_join('cleo',self.priorities[pri]['icon']),
+                    com.appendImageDictToList(icons, g.os_path_join('cleo', self.priorities[pri]['icon']),
                         2, on='vnode', cleoIcon='1', where=self.icon_location)
                         # Icon location defaults to 'beforeIcon' unless cleo_icon_location global defined.
                         # Example: @strings[beforeIcon,beforeHeadline] cleo_icon_location = beforeHeadline
@@ -562,8 +551,7 @@ class todoController(object):
                     prog = int(prog or 0)
                     use = prog//10*10
                     use = 'prg%03d.png' % use
-                    com.appendImageDictToList(icons, self.iconDir,
-                        g.os_path_join('cleo',use),
+                    com.appendImageDictToList(icons, g.os_path_join('cleo', use),
                         2, on='vnode', cleoIcon='1', where=self.prog_location)
             elif which == 'duedate':
                 duedate = self.getat(p.v, 'duedate')
@@ -576,8 +564,7 @@ class todoController(object):
                         icon = "date_today.png"
                     else:
                         icon = "date_future.png"
-                    com.appendImageDictToList(icons, self.iconDir,
-                        g.os_path_join('cleo', icon),
+                    com.appendImageDictToList(icons, g.os_path_join('cleo', icon),
                         2, on='vnode', cleoIcon='1', where=self.prog_location)
 
         com.setIconList(p, icons, setDirty=False)
@@ -731,7 +718,9 @@ class todoController(object):
     def redraw(self):
 
         self.updateUI()
-        self.c.redraw()
+        if not g.app.initing:
+            self.c.redraw()
+                # This is disabled (converted to redraw_later) during startup.
     #@+node:tbrown.20090119215428.29: *4* clear_all
     @redrawer
     def clear_all(self, recurse=False, all=False):
@@ -1298,7 +1287,23 @@ class todoController(object):
 
         return c2, nd
     #@-others
+#@+node:tbrown.20170928065405.1: ** command fix datetime
+@g.command('todo-fix-datetime')
+def todo_fix_datetime(event):
+
+    c = event['c']
+    changed = 0
+    for nd in c.all_unique_nodes():
+        for key in c.cleo._datetime_fields:
+            x = c.cleo.getat(nd, key)
+            if not g.isString(x):
+                c.cleo.setat(nd, key, x)
+                changed += 1
+                g.es("%r -> %r" % (x, c.cleo.getat(nd, key)))
+    g.es("Changed %d attribs." % changed)
+
 #@+node:tbrown.20100701093750.13800: ** command inc/dec priority
+
 @g.command('todo-dec-pri')
 def todo_dec_pri(event, direction=1):
 

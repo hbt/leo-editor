@@ -1,9 +1,14 @@
 # Byte-compiled / optimized / DLL files
+profile.txt
 __pycache__/
+.cache/
 *.py[cod]
 
 # .db files
 *.db
+
+# Files in leo/proto
+leo/proto/*
 
 # C extensions
 *.so

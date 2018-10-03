@@ -223,9 +223,9 @@ def openurl_rclick(c,p,menu):
     if url:
 
         def openurl_rclick_cb():
-            if not g.doHook("@url1",c=c,p=p,v=p,url=url):
+            if not g.doHook("@url1",c=c,p=p,url=url):
                 g.handleUrl(url,c=c,p=p)
-            g.doHook("@url2",c=c,p=p,v=p)
+            g.doHook("@url2",c=c,p=p)
 
         action = menu.addAction("Open URL")
         action.triggered.connect(openurl_rclick_cb)
@@ -294,7 +294,6 @@ def openwith_rclick(c,p,menu):
         return
     path = g.scanAllAtPathDirectives(c,p)
     editor = g.guessExternalEditor()
-    # g.trace(repr(path),repr(fname))
     absp = g.os_path_finalize_join(path, fname)
     exists = os.path.exists(absp)
     if not exists and head == "@path":

@@ -17,7 +17,7 @@ available.'''
 #@+<< imports >>
 #@+node:ekr.20100908120927.5971: ** << imports >> (leoRst)
 import leo.core.leoGlobals as g
-verbose = g.app.trace_plugins
+verbose = 'plugins' in g.app.debug
 try:
     import docutils
     import docutils.core
@@ -39,6 +39,7 @@ if docutils:
         g.es_exception()
         docutils = None
 if g.isPython3:
+    # pylint: disable=no-name-in-module
     import html.parser as HTMLParser
 else:
     import HTMLParser
@@ -130,13 +131,13 @@ class RstCommands(object):
     '''
     #@+others
     #@+node:ekr.20090502071837.34: *3* rst.Birth
-    #@+node:ekr.20090502071837.35: *4*  rst.ctor
+    #@+node:ekr.20090502071837.35: *4*  rst.ctor & rst.reloadSettings
     def __init__(self, c):
         '''Ctor for the RstCommand class.'''
         global SilverCity
         self.c = c
         # Debugging and statistics.
-        self.debug = c.config.getBool('rst3_debug', default=False)
+        self.debug = False # Set in reloadSettings.
         self.n_written = 0
             # Number of files written.
         # Warning flags.
@@ -185,12 +186,19 @@ class RstCommands(object):
         self.path = ''
             # The path from any @path directive. Set by init_write.
             # May be overridden (in computeOutputFileName() by rst3_default_path option.
-        self.rootNode = None
+        self.root = None
+            # The @rst node being processed.
         self.source = None
             # The written source as a string.
         # Complete the init.
+        self.reloadSettings()
         self.updateD0FromSettings()
         self.initHeadlineCommands()
+
+    def reloadSettings(self):
+        '''RstCommand.reloadSettings'''
+        self.debug = self.c.config.getBool('rst3_debug', default=False)
+        
     #@+node:ekr.20150509035745.1: *4* rst.cmd (decorator)
     def cmd(name):
         '''Command decorator for the RstCommands class.'''
@@ -265,6 +273,7 @@ class RstCommands(object):
             '@rst-head',
             '@rst-ignore-node',
             '@rst-ignore-tree',
+            '@rst-ignore',
             '@rst-no-head',
             '@rst-no-headlines',
             '@rst-table', # New in Leo 5.3.
@@ -286,7 +295,6 @@ class RstCommands(object):
     #@+node:ekr.20150320033317.10: *4* rst.updateD0FromSettings
     def updateD0FromSettings(self):
         '''Update entries in self.d0 from user seettings.'''
-        trace = False and not g.unitTesting
         c, d = self.c, self.d0
         table = (
             ('@bool', c.config.getBool),
@@ -298,8 +306,6 @@ class RstCommands(object):
                 if val is not None:
                     old = d.get(key)
                     if val != old:
-                        if trace: g.trace('%-7s %30s old: %20s new: %s' % (
-                            kind, key, old, val))
                         d[key] = val
                     break
         # Special warning for mod_http plugin.
@@ -344,7 +350,7 @@ class RstCommands(object):
                 writeIntermediateFile=writeIntermediateFile)
     #@+node:ekr.20100812082517.5963: *5* rst.write_code_body & helpers
     def write_code_body(self, p):
-        trace = False
+
         self.p = p.copy() # for traces.
         if not p.b.strip():
             return # No need to write any more newlines.
@@ -353,7 +359,6 @@ class RstCommands(object):
         parts = self.split_parts(lines, showDocsAsParagraphs)
         result = []
         for kind, lines in parts:
-            if trace: g.trace(kind, len(lines), p.h)
             if kind == '@rst-option': # Also handles '@rst-options'
                 pass # The prepass has already handled the options.
             elif kind == '@rst-markup':
@@ -525,10 +530,11 @@ class RstCommands(object):
                 h.startswith('@rst') and not h.startswith('@rst-') or
                 h.startswith('@slides'))
 
-        roots = g.findRootsWithPredicate(self.c, p, predicate)
+        roots = g.findRootsWithPredicate(self.c, p, predicate=predicate)
         if roots:
             for p in roots:
-                self.processTree(p, ext = None, toString = False, justOneFile = justOneFile)
+                self.root = p.copy()
+                self.processTree(p, ext=None, toString=False, justOneFile=justOneFile)
         else:
             g.warning('No @rst or @slides nodes in', p.h)
     #@+node:ekr.20090502071837.63: *5* rst.processTree
@@ -537,8 +543,6 @@ class RstCommands(object):
         Process all @rst nodes in a tree.
         ext is the docutils extention: it's useful for scripts and unit tests.
         '''
-        trace = False and not g.unitTesting
-        if trace: g.trace(p.h)
         self.stringOutput = ''
         p = p.copy()
         after = p.nodeAfterTree()
@@ -546,13 +550,12 @@ class RstCommands(object):
             h = p.h.strip()
             if g.match_word(h, 0, '@rst-ignore-tree'):
                 p.moveToNodeAfterTree()
-            elif g.match_word(h, 0, '@rst-ignore'):
+            elif g.match_word(h, 0, '@rst-ignore') or g.match_word(h, 0, '@rst-ignore-node'):
                 p.moveToThreadNext()
             elif g.match_word(h, 0, "@rst"):
                 self.rst_nodes.append(p.copy())
                 fn = h[4:].strip()
                 if ((fn and fn[0] != '-') or (toString and not fn)):
-                    if trace: g.trace('found: %s', p.h)
                     self.write_rst_tree(p, ext, fn, toString=toString, justOneFile=justOneFile)
                     if toString:
                         return p.copy(), self.stringOutput
@@ -637,7 +640,7 @@ class RstCommands(object):
     #@+node:ekr.20090502071837.58: *5* rst.write methods
     #@+node:ekr.20090502071837.68: *6* rst.getDocPart
     def getDocPart(self, lines, n):
-        # g.trace('n',n,repr(''.join(lines)))
+
         result = []
         #@+<< Append whatever follows @doc or @space to result >>
         #@+node:ekr.20090502071837.69: *7* << Append whatever follows @doc or @space to result >>
@@ -664,7 +667,7 @@ class RstCommands(object):
         return n, result
     #@+node:ekr.20090502071837.81: *6* rst.handleSpecialDocParts
     def handleSpecialDocParts(self, lines, kind, retainContents, asClass=None):
-        # g.trace(kind,g.listToString(lines))
+
         result = []; n = 0
         while n < len(lines):
             s = lines[n]; n += 1
@@ -719,8 +722,6 @@ class RstCommands(object):
             result = g.match_word(s, 0, '@doc') or g.match_word(s, 0, '@')
         else:
             result = False
-        # g.trace('kind %s, result %s, s %s' % (
-            # repr(kind),result,repr(s)))
         return result
     #@+node:ekr.20090502071837.80: *6* rst.removeLeoDirectives
     def removeLeoDirectives(self, lines):
@@ -734,7 +735,6 @@ class RstCommands(object):
             elif s.startswith('@') and not self.isAnySpecialDocPart(s):
                 for key in self.leoDirectivesList:
                     if g.match_word(s, 1, key):
-                        # g.trace('removing %s' % s)
                         break
                 else:
                     result.append(s)
@@ -781,12 +781,10 @@ class RstCommands(object):
     #@+node:ekr.20090502071837.71: *6* rst.writeBody & helpers
     def writeBody(self, p):
         '''Write p.b as rST.'''
-        trace = False and not g.unitTesting
         if self.getOption(p, 'ignore_noweb_definitions'):
             # Ignore section definition nodes.
             name = self.isSectionDef(p)
             if name:
-                if trace: g.trace('section def: %s' % (repr(name)))
                 return
         # remove trailing cruft and split into lines.
         lines = g.splitLines(p.b)
@@ -843,8 +841,6 @@ class RstCommands(object):
     #@+node:ekr.20110610144305.6750: *7* rst.expandSectionRefs
     def expandSectionRefs(self, lines, p, seen):
         '''Expand section references in lines.'''
-        trace = False and not g.unitTesting
-        if trace: g.trace(p.h, g.callers())
         result = []
         for s in lines:
             name = self.isSectionRef(s)
@@ -884,7 +880,6 @@ class RstCommands(object):
         - @ @rst-markup lines get copied as is.
         - Everything else gets put into a code-block directive.
         '''
-        trace = False and not g.unitTesting
         result = []; n = 0; code = []
         while n < len(lines):
             s = lines[n]; n += 1
@@ -901,8 +896,6 @@ class RstCommands(object):
                 n, lines2 = self.getDocPart(lines, n)
                 # A fix, perhaps dubious, to a bug discussed at
                 # http://groups.google.com/group/leo-editor/browse_thread/thread/c212814815c92aac
-                # lines2 = [z.lstrip() for z in lines2]
-                # g.trace('lines2',lines2)
                 result.extend(lines2)
             elif not s.strip() and not code:
                 pass # Ignore blank lines before the first code block.
@@ -910,7 +903,6 @@ class RstCommands(object):
                 if not code: # Start the code block.
                     result.append('')
                     result.append(self.code_block_string)
-                if trace: g.trace('code line: %s' % repr(s))
                 code.append(s)
         if code:
             self.finishCodePart(code, p, result)
@@ -1070,7 +1062,6 @@ class RstCommands(object):
             line 1
             line 2 etc.
         '''
-        # g.trace(p.h,g.callers())
         lines = p.b.split('\n')
         lines = [' ' * 4 + z for z in lines]
         lines.insert(0, '::\n')
@@ -1106,7 +1097,7 @@ class RstCommands(object):
         c = self.c
         current = p or c.p
         self.initSettings(current)
-        for p in current.self_and_parents():
+        for p in current.self_and_parents(copy=False):
             if p.h.startswith('@rst'):
                 return self.processTree(p, ext=ext, toString=True, justOneFile=True)
         return self.processTree(current, ext=ext, toString=True, justOneFile=True)
@@ -1174,17 +1165,15 @@ class RstCommands(object):
     #@+node:ekr.20090502071837.44: *4* rst.getOption
     def getOption(self, p, name):
         '''Return the value of the named option at node p.'''
+        d = self.scriptSettingsDict
         name = self.munge(name)
-        trace = False and not g.unitTesting
         assert p, g.callers()
             # We may as well fail here.
 
         def dump(kind, p, val):
-            if trace:
-                g.pr('getOption: %7s %30s %-15r %s' % (kind, name, val, p.h))
-        # 1. Search scriptSettingsDict.
+            pass
 
-        d = self.scriptSettingsDict
+        # 1. Search scriptSettingsDict.
         val = d.get(name)
         if val is not None:
             dump('script', p, val)
@@ -1196,7 +1185,9 @@ class RstCommands(object):
             dump('single', p, val)
             return val
         # 3. Search all parents, using self.dd.
-        for p2 in p.self_and_parents():
+        root = self.root if self.root and p.isAncestorOf(self.root) else p
+            # Fix #362.
+        for p2 in root.self_and_parents(copy=False):
             d = self.dd.get(p2.v, {})
             val = d.get(name)
             if val is not None:
@@ -1209,12 +1200,10 @@ class RstCommands(object):
     #@+node:ekr.20090502071837.45: *4* rst.initCodeBlockString
     def initCodeBlockString(self, p):
         '''Init the string used to write code-block directives.'''
-        trace = False and not g.unitTesting
         c = self.c
         d = c.scanAllDirectives(p)
         language = d.get('language', 'python').lower()
         syntax = SilverCity is not None
-        if trace: g.trace('language', language, 'language.title()', language.title(), p.h)
         # Note: lines that end with '\n\n' are a signal to handleCodeMode.
         s = self.getOption(p, 'code_block_string')
         if s:
@@ -1235,12 +1224,12 @@ class RstCommands(object):
         self.preprocessTree(p)
     #@+node:ekr.20090502071837.46: *4* rst.preprocessTree & helpers
     def preprocessTree(self, root):
-        '''Init settings in root, its subtree and all pareents.'''
+        '''Init settings in root, its subtree and all parents.'''
         self.dd = {}
         # Bug fix 12/4/05: must preprocess parents too.
         for p in root.parents():
             self.preprocessNode(p)
-        for p in root.self_and_subtree():
+        for p in root.self_and_subtree(copy=False):
             self.preprocessNode(p)
     #@+node:ekr.20090502071837.47: *5* rst.preprocessNode & helper
     def preprocessNode(self, p):
@@ -1257,31 +1246,23 @@ class RstCommands(object):
         Such entries may arise from @rst-option or @rst-options in the headline,
         or from @ @rst-options doc parts.
         '''
-        trace = (False or self.debug) and not g.unitTesting
         # A fine point: body options over-ride headline options.
         d = self.scanHeadlineForOptions(p)
-        if trace and d:
-            self.dumpDict(d, 'headline options: %s' % (p.h))
         d2 = self.scanForOptionDocParts(p, p.b)
-        if trace and d2:
-            self.dumpDict(d2, 'option doc parts: %s' % (p.h))
         d.update(d2)
         return d
     #@+node:ekr.20090502071837.50: *7* rst.scanHeadlineForOptions
     def scanHeadlineForOptions(self, p):
         '''Return a dictionary containing the options implied by p's headline.'''
-        trace = False and not g.unitTesting
         h = p.h.strip()
         if p == self.topNode:
             return {} # Don't mess with the root node.
         elif g.match_word(h, 0, '@rst-option'):
             s = h[len('@rst-option'):]
             d = self.scanOption(p, s)
-            if trace: self.dumpDict(d, '@rst-option')
             return d
         elif g.match_word(h, 0, '@rst-options'):
             d = self.scanOptions(p, p.b)
-            if trace: self.dumpDict(d, '@rst-options')
             return d
         else:
             # Careful: can't use g.match_word because options may have '-' chars.
@@ -1294,7 +1275,7 @@ class RstCommands(object):
                 ('@rst-doc-only', 'doc_only_mode', True),
                 ('@rst-head', 'show_this_headline', True),
                 # ('@rst-head' ,        'show_headlines',False),
-                ('@rst-ignore', 'ignore_this_tree', True),
+                ('@rst-ignore', 'ignore_this_node', True),
                 ('@rst-ignore-node', 'ignore_this_node', True),
                 ('@rst-ignore-tree', 'ignore_this_tree', True),
                 ('@rst-no-head', 'ignore_this_headline', True),
@@ -1311,8 +1292,6 @@ class RstCommands(object):
                     # Special case: Treat a bare @rst like @rst-no-head
                     if h == '@rst':
                         d['ignore_this_headline'] = True
-                    if trace and option != '@rst':
-                        self.dumpDict(d, p.h)
                     return d
             if h.startswith('@rst'):
                 g.trace('unknown kind of @rst headline', p.h, g.callers(4))
@@ -1360,9 +1339,7 @@ class RstCommands(object):
         Return { name:val } if s is a line of the form name=val.
         Otherwise return {}
         '''
-        trace = False and not g.unitTesting
         if not s.strip() or s.strip().startswith('..'):
-            if trace: g.trace('rst comment: {}')
             return {}
         data = self.parseOptionLine(s)
         if data:
@@ -1371,7 +1348,6 @@ class RstCommands(object):
                 if val.lower() == 'true': val = True
                 elif val.lower() == 'false': val = False
                 d = {self.munge(name): val}
-                if trace: g.trace('found', p.h)
                 return d
             else:
                 g.error('ignoring unknown option:', name)
@@ -1495,7 +1471,7 @@ class RstCommands(object):
         Look at the descendents of p.
         Used for relocation.
         """
-        for p1 in p.self_and_subtree():
+        for p1 in p.self_and_subtree(copy=False):
             attr = mod_http.get_http_attribute(p1)
             if attr:
                 yield(p1.copy(), attr)
@@ -1596,7 +1572,6 @@ class RstCommands(object):
     #@+node:ekr.20090502071837.65: *5* rst.writeToDocutils (sets argv) & helper
     def writeToDocutils(self, p, s, ext):
         '''Send s to docutils using the writer implied by ext and return the result.'''
-        trace = False and not g.unitTesting
         if not docutils:
             g.error('writeToDocutils: docutils not present')
             return None
@@ -1640,7 +1615,6 @@ class RstCommands(object):
             openDirectory, rel_stylesheet_path)
         stylesheet_name = self.getOption(p, 'stylesheet_name')
         assert stylesheet_name
-        if trace: g.trace('stylesheet_name', stylesheet_name)
         path = g.os_path_finalize_join(stylesheet_path, stylesheet_name)
         if self.getOption(p, 'stylesheet_embed') is False:
             rel_path = g.os_path_join(
@@ -1668,7 +1642,6 @@ class RstCommands(object):
                 g.es_print('relative path:', rel_stylesheet_path)
         try:
             # All paths now come through here.
-            if trace: g.trace('overrides', overrides)
             result = None # Ensure that result is defined.
             result = docutils.core.publish_string(source=s,
                     reader_name='standalone',
@@ -1736,7 +1709,6 @@ class RstCommands(object):
                     else:
                         val = s[: cm].strip()
                         s = s[cm + 1:].strip()
-            # g.trace('key',repr(key),'val',repr(val),'s',repr(s))
             if not key:
                 break
             if not val.strip(): val = '1'
@@ -1748,7 +1720,8 @@ class RstCommands(object):
         '''Return the full path to the output file.'''
         c = self.c
         openDirectory = c.frame.openDirectory
-        default_path = self.getOption(c.p, 'default_path')
+        default_path = self.getOption(self.root or c.p, 'default_path')
+            # Subtle change, part of #362: scan options starting at self.root, not c.p.
         if default_path:
             path = g.os_path_finalize_join(self.path, default_path, fn)
         elif self.path:
@@ -1757,10 +1730,6 @@ class RstCommands(object):
             path = g.os_path_finalize_join(self.path, openDirectory, fn)
         else:
             path = g.os_path_finalize_join(fn)
-        if self.debug and not g.unitTesting:
-            g.trace('openDirectory:', repr(openDirectory))
-            g.trace('default_path: ', repr(default_path))
-            g.trace('path:         ', repr(path))
         return path
     #@+node:ekr.20090502071837.43: *4* rst.dumpDict
     def dumpDict(self, d, tag):
@@ -1789,13 +1758,10 @@ class RstCommands(object):
         Return the underlining string to be used at the given level for string s.
         This includes the headline, and possibly a leading overlining line.
         '''
-        trace = False and not g.unitTesting
         if self.atAutoWrite:
             # We *might* generate overlines for top-level sections.
             u = self.atAutoWriteUnderlines
             level = p.level() - self.topLevel
-            if trace: g.trace('level: %s under2: %r under1: %r %s' % (
-                level, self.underlines2, self.underlines1, p.h))
             # This is tricky. The index n depends on several factors.
             if self.underlines2:
                 level -= 1 # There *is* a double-underlined section.
@@ -1811,7 +1777,6 @@ class RstCommands(object):
                 ch = '#'
             # Write longer underlines for non-ascii characters.
             n = max(4, len(g.toEncodedString(s, encoding=self.encoding, reportErrors=False)))
-            if trace: g.trace(self.topLevel, p.level(), level, repr(ch), p.h)
             if level == 0 and self.underlines2:
                 return '%s\n%s\n%s\n\n' % (ch * n, p.h, ch * n)
             else:
@@ -1822,7 +1787,6 @@ class RstCommands(object):
             level = max(0, p.level() - self.topLevel)
             level = min(level + 1, len(u) - 1) # Reserve the first character for explicit titles.
             ch = u[level]
-            if trace: g.trace(self.topLevel, p.level(), level, repr(ch), p.h)
             n = max(4, len(g.toEncodedString(s, encoding=self.encoding, reportErrors=False)))
             return '%s\n%s\n\n' % (s.strip(), ch * n)
                 # Fixes bug 618570:
@@ -1939,13 +1903,11 @@ class HtmlParserClass(LinkAnchorParserClass):
         is_node_marker = False
         if self.is_anchor(tag, attrs) and self.is_node_marker(attrs):
             is_node_marker = self.is_node_marker(attrs)
-            # g.trace(tag,attrs)
             line, column = self.getpos()
             if self.last_position:
                 lines = self.node_code[:]
                 lines[0] = lines[0][self.startpos:]
                 del lines[line - self.deleted_lines - 1:]
-                # g.trace('Storing in %s...\n%s' % self.last_position, lines)
                 mod_http.get_http_attribute(self.last_position).extend(lines)
                 #@+<< trace the unknownAttribute >>
                 #@+node:ekr.20120219194520.10453: *5* << trace the unknownAttribute >>
@@ -1958,7 +1920,6 @@ class HtmlParserClass(LinkAnchorParserClass):
                 del self.node_code[: line - 1 - self.deleted_lines]
                 self.deleted_lines = line - 1
                 self.endpos_pending = True
-        # g.trace("rst2: handle_starttag:", tag, attrs, is_node_marker)
         starttag = self.get_starttag_text()
         self.stack = [starttag, None, self.stack]
         self.node_marker_stack.append(is_node_marker)
@@ -1970,7 +1931,6 @@ class HtmlParserClass(LinkAnchorParserClass):
            store the current stack for that node.
         '''
         self.stack[1] = "</" + tag + ">"
-        # g.trace(tag,g.listToString(self.stack))
         if self.endpos_pending:
             line, column = self.getpos()
             self.startpos = self.node_code[0].find(">", column) + 1
@@ -1987,7 +1947,6 @@ class HtmlParserClass(LinkAnchorParserClass):
     #@+node:ekr.20120219194520.10455: *4* feed
     def feed(self, line):
         # pylint: disable=arguments-differ
-        # g.trace(repr(line))
         self.node_code.append(line)
         HTMLParser.HTMLParser.feed(self, line) # Call the base class's feed().
     #@-others

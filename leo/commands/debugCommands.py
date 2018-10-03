@@ -29,10 +29,7 @@ class DebugCommandsClass(BaseEditCommandsClass):
     @cmd('gc-dump-all-objects')
     def dumpAllObjects(self, event=None):
         '''Print a summary of all existing Python objects.'''
-        old = g.trace_gc
-        g.trace_gc = True
         g.printGcAll()
-        g.trace_gc = old
 
     @cmd('gc-dump-new-objects')
     def dumpNewObjects(self, event=None):
@@ -40,18 +37,12 @@ class DebugCommandsClass(BaseEditCommandsClass):
         Print a summary of all Python objects created
         since the last time Python's Garbage collector was run.
         '''
-        old = g.trace_gc
-        g.trace_gc = True
         g.printGcObjects()
-        g.trace_gc = old
 
     @cmd('gc-dump-objects-verbose')
     def verboseDumpObjects(self, event=None):
         '''Print a more verbose listing of all existing Python objects.'''
-        old = g.trace_gc
-        g.trace_gc = True
         g.printGcVerbose()
-        g.trace_gc = old
     #@+node:ekr.20170713112849.1: *3* debug.dumpNode
     @cmd('dump-node')
     def dumpNode(self, event=None):
@@ -64,21 +55,6 @@ class DebugCommandsClass(BaseEditCommandsClass):
                 g.printDict(p.v.u)
             else:
                 g.es_print('no uAs')
-    #@+node:ekr.20150514063305.107: *3* debug.enable/disableGcTrace
-    @cmd('gc-trace-disable')
-    def disableGcTrace(self, event=None):
-        '''Enable tracing of Python's Garbage Collector.'''
-        g.trace_gc = False
-
-    @cmd('gc-trace-enable')
-    def enableGcTrace(self, event=None):
-        '''Disable tracing of Python's Garbage Collector.'''
-        g.trace_gc = True
-        g.enable_gc_debug()
-        if g.trace_gc_verbose:
-            g.blue('enabled verbose gc stats')
-        else:
-            g.blue('enabled brief gc stats')
     #@+node:ekr.20150514063305.108: *3* debug.freeTreeWidgets
     def freeTreeWidgets(self, event=None):
         '''Free all widgets used in Leo's outline pane.'''
@@ -157,42 +133,13 @@ class DebugCommandsClass(BaseEditCommandsClass):
         else:
             g.es_print('log listener not active.')
 
-    #@+node:ekr.20170429152049.1: *3* debug.listenToLog
-    @cmd('listen-to-log')
-    @cmd('log-listen')
-    def listenToLog(self, event=None):
-        '''
-        A socket listener, listening on localhost. See:
-        https://docs.python.org/2/howto/logging-cookbook.html#sending-and-receiving-logging-events-across-a-network
-
-        Start this listener first, then start the broadcaster.
-
-        leo/plugins/cursesGui2.py is a typical broadcaster.
-        '''
-        # Kill any previous listener.
-        if g.app.log_listener:
-            g.es_print('Killing previous listener')
-            try:
-                g.app.log_listener.kill()
-            except Exception:
-                g.es_exception()
-            g.app.log_listener = None
-        # Start a new listener.
-        g.es_print('Starting log_listener.py')
-        path = g.os_path_finalize_join(g.app.loadDir,
-            '..', 'external', 'log_listener.py')
-        g.app.log_listener = subprocess.Popen(
-            [sys.executable, path],
-            shell=False,
-            universal_newlines=True,
-        )
     #@+node:ekr.20150514063305.109: *3* debug.pdb
     @cmd('pdb')
     def pdb(self, event=None):
         '''Fall into pdb.'''
         g.pdb()
     #@+node:ekr.20150514063305.110: *3* debug.printFocus
-    @cmd('print-focus')
+    @cmd('show-focus')
     def printFocus(self, event=None):
         '''
         Print information about the requested focus.
@@ -208,7 +155,7 @@ class DebugCommandsClass(BaseEditCommandsClass):
             '           c.get_focus:',
             c.widget_name(c.get_focus()))
     #@+node:ekr.20150514063305.111: *3* debug.printGcSummary
-    @cmd('gc-print-summary')
+    @cmd('gc-show-summary')
     def printGcSummary(self, event=None):
         '''Print a brief summary of all Python objects.'''
         g.printGcSummary()
