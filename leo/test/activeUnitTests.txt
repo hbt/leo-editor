@@ -196,18 +196,20 @@ def setup_test(target):
         assert p2,'not found: %s' % (h)
         p2.setMarked()
         
-    for child in target.children():
-        if child.h == 'a':
-            assert child.isCloned(),'not cloned!: %s' % (child)
-        else:
-            assert not child.isCloned(),'cloned!: %s' % (child)
+    if 1: # This is correct.
+        for child in target.children():
+            if child.h == 'a':
+                assert child.isCloned(),'not cloned!: %s' % (child)
+            else:
+                assert not child.isCloned(),'cloned!: %s' % (child)
         
     # g.trace('setup complete')
     
 #@+node:ekr.20111006115024.3613: *4* tear_down
 def tear_down(p,h=None):
     
-    delete_children(p)
+    if 1:
+        delete_children(p)
     
     if h:
         node = g.findNodeAnywhere(c,h)
@@ -307,21 +309,13 @@ def run(self):
     assert rst,'rst'
     assert html,'html'
     # Kludge: disregard version of docutils.
-    if 1:
-        import re
-        html = re.sub('Docutils [\.0-9]*:','Docutils VER:',html)
-    else:
-        html = html.replace('Docutils 0.8.1:','Docutils VER:')
-        html = html.replace('Docutils 0.6:','Docutils VER:')
-        html = html.replace('Docutils 0.7:','Docutils VER:')
-        html = html.replace('Docutils 0.8:','Docutils VER:')
-        html = html.replace('Docutils 0.10:','Docutils VER:')
-        html = html.replace('Docutils 0.12:','Docutils VER:')
+    html = self.munge(html)
     if expected.hasChildren():
         child1 = expected.firstChild()
         child2 = expected.firstChild().next()
         child1_b = clean(child1.b)
         child2_b = clean(child2.b)
+        child2_b = self.munge(child2.b) ###
         ok = rst == child1_b and html == child2_b
         if not ok:
             got_html,got_rst = self.set_got(expected,got)
@@ -338,6 +332,13 @@ def run(self):
         child.h,child.b = 'rst',rst
         child = expected.insertAsNthChild(1)
         child.h,child.b = ' html',html
+#@+node:ekr.20171223221351.1: *5* munge NEW
+def munge(self, html):
+    '''Ignore local differences in output of docutils.'''
+    import re
+    html = re.sub('Docutils [\.0-9]*:','Docutils VER:',html)
+    html = re.sub('<title>.*</title>','<title></title>',html)
+    return html
 #@+node:ekr.20100827183358.5958: *5* setup
 def setup (self):
     
@@ -417,7 +418,6 @@ else:
     assert not g.os_path_exists(fn)
     try:
         c = c1.new()
-        assert not c.cacher.db
         # Not a perfect unit test, but it similar to c.save.
         c.mFileName = fn
         c.openDirectory = c.frame.openDirectory = g.os_path_dirname(fn)
@@ -500,7 +500,7 @@ for key in keys:
 #@+node:ekr.20110613143220.3314: *3* @test All menus execute the proper command
 @ We want to ensure that when masterMenuHandler does::
     
-    event = g.app.gui.create_key_event(c,None,stroke,w)
+    event = g.app.gui.create_key_event(c,binding=stroke,w=w)
     return k.masterKeyHandler(event)
     
 that the effect will be to call commandName, where commandName
@@ -589,6 +589,7 @@ else:
 #@+node:ekr.20100131171342.5483: *3* @test batch mode
 import os
 import sys
+silent = True
 trace = False
 python_interp = sys.executable
 test_path = g.os_path_join(g.app.loadDir,"..","test","unittest")
@@ -598,8 +599,11 @@ leo_file   = g.os_path_join(src_path,"launchLeo.py")
 batch_file = g.os_path_join(test_path,"batchTest.py")
 test_file  = g.os_path_join(test_path,"createdFile.txt")
 
+assert g.os_path_exists(batch_file), batchTest
+
 # Execute this command: python launchLeo.py --script test\unittest\batchTest.py
-if 1:
+# Note: batchTest.py is defined in this file, unitTest.leo.
+if silent:
     command = r"%s %s --silent --script %s" % (python_interp,leo_file,batch_file)
 else:
     command = r"%s %s --script %s" % (python_interp,leo_file,batch_file)
@@ -608,9 +612,12 @@ else:
 
 if trace:
     print('@test batch mode: loadDir: %s' % g.app.loadDir)
+    print('test_file: %s' % test_file)
 removeFile(test_file)
+if trace:
+    print('command: %s' %  command)
 os.system(command)
-assert(g.os_path_exists(test_file))
+assert g.os_path_exists(test_file), repr(test_file)
 #@+node:ekr.20100131171342.5484: *4* removeFile
 def removeFile(path):
 
@@ -733,7 +740,7 @@ table = (
     ('minibuffer_warning_color',        getColor('minibuffer_warning_color') or 'lightgrey'),
     ('overwrite_mode_bg_color',         getColor('overwrite_mode_bg_color') or bg),
     ('overwrite_mode_fg_color',         getColor('overwrite_mode_fg_color') or fg),
-    ('swap_mac_keys',                   getBool('swap_mac_keys')),
+    # ('swap_mac_keys',                   getBool('swap_mac_keys')),
     ('unselected_body_bg_color',        getColor('unselected_body_bg_color') or bg),
     ('unselected_body_fg_color',        getColor('unselected_body_fg_color') or bg),
     ('warn_about_redefined_shortcuts',  getBool('warn_about_redefined_shortcuts')),
@@ -823,7 +830,8 @@ ivars = (
     'windowList',
     # Less-official and might be removed...
     'batchMode',
-    'debugSwitch','disableSave',
+    # 'debugSwitch',
+    'disableSave',
     'hookError','hookFunction',
     'numberOfUntitledWindows',
     'realMenuNameDict',
@@ -1008,6 +1016,8 @@ for theDir in ('core','external','extensions','plugins','scripts','test'):
     path = g.os_path_finalize_join(g.app.loadDir,'..',theDir)
     assert g.os_path_exists(path),path
     aList = glob.glob(g.os_path_join(path,'*.py'))
+    if g.isWindows:
+        aList = [z.replace('\\','/') for z in aList]
     for z in aList:
         if z in skip_list:
             pass # print('%s: skipped: %s' % (p.h,z))
@@ -1019,7 +1029,7 @@ for theDir in ('core','external','extensions','plugins','scripts','test'):
             if not c.testManager.checkFileSyntax(fn,s,reraise=False,suppress=False):
                 failed.append(z)
 if trace: print('tested %s files' % n)
-assert not failed,'failed %s\n' % g.listToString(failed,sort=True)
+assert not failed,'failed %s\n' % g.listToString(failed)
 #@+node:ekr.20110612071416.3311: *3* @test syntax of setup.py
 fn = g.os_path_finalize_join(g.app.loadDir,'..','..','setup.py')
 
@@ -1034,7 +1044,7 @@ if g.os_path_exists(fn):
 s = "testᾹ(U+1FB9: Greek Capital Letter Alpha With Macron)"
 
 s2 = 'test: %s' % s
-#@+node:ekr.20050208051854: *3* @test atFile.printError
+#@+node:ekr.20050208051854: *3* @@test atFile.printError
 @first # -*- coding: utf-8 -*-
 
 at = c.atFileCommands
@@ -1179,7 +1189,9 @@ if not g.isPython3: # Does not work with Python 3.x
 
 # g.openWithFileName *always* opens the file.
 
-if not g.app.isExternalUnitTest:
+if g.app.isExternalUnitTest:
+    self.skipTest('Not for external test')
+else:
     if g.isPython3:
         # Do not call g.ue: it will crash.
         theFile = 'Ỗ'
@@ -1187,7 +1199,6 @@ if not g.app.isExternalUnitTest:
         theFile = g.ue('Ỗ','utf-8')
     
     path = g.os_path_join('Ỗ','Ỗ')
-
     try:
         c2 = g.openWithFileName(path,old_c=c)
     finally:
@@ -1252,9 +1263,9 @@ import leo.core.leoFrame as leoFrame
 # Do nothing when run externally.
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
-elif g.app.gui.guiName() == 'curses':
+elif g.app.gui.guiName() in ('curses', 'nullGui'):
     # assert False, 'Not ready yet: interferes with other tests'
-    self.skipTest('Not for curses gui')
+    self.skipTest('Not for curses or null gui')
 else:
     assert not isinstance(c.frame,leoFrame.NullFrame)
     def closeEnough(f1,f2):
@@ -1337,27 +1348,6 @@ g.app.recentFilesManager.writeRecentFilesFileHelper(fn)
 assert g.os_path_exists(fn),'fail 1'
 os.remove(fn)
 assert not g.os_path_exists(fn),'fail 1'
-#@+node:ekr.20130503061820.4186: *4* @test consistency of leoApp tables
-@
-language_delims_dict 
-    # Keys are languages, values are 1,2 or 3-tuples of delims. 
-language_extension_dict
-    # Keys are languages, values are extensions.
-extension_dict = {
-    # Keys are extensions, values are languages.
-@c
-
-delims_d    = g.app.language_delims_dict
-lang_d      = g.app.language_extension_dict
-ext_d       = g.app.extension_dict
-
-for lang in lang_d:
-    ext = lang_d.get(lang)
-    assert lang in delims_d,'fail 1: %s' % lang
-    assert ext in ext_d,'fail 2: %s' % ext
-for ext in ext_d:
-    lang = ext_d.get(ext)
-    assert lang in lang_d,'fail 3: %s' % lang
 #@+node:ekr.20160318094003.1: *3* leoAst
 #@+node:ekr.20160318094009.1: *4* @test Python3 features
 if not g.isPython3:
@@ -1379,7 +1369,7 @@ else:
     leoAst.AstFullTraverser().visit(node)
     s = leoAst.HTMLReportTraverser(debug=True).main(fn, node)
     assert s
-    s = leoAst.AstFormatter().format(node)
+    s = leoAst.AstFormatter().format(node,level=0)
     assert s
     s = py2cs.CoffeeScriptTraverser(controller=g.NullObject()).format(node, src, tokens)
     assert s
@@ -1603,10 +1593,7 @@ s2 = '''
 at = c.atFileCommands
 assert at.isFileLike(s1),'fail1'
 assert not at.isFileLike(s2),'fail2'
-#@+node:ekr.20071113143844.5: *4* @test at.isSignificantTree
-assert c.atFileCommands.isSignificantTree(p)
-
-#@+node:ekr.20110524091618.3488: *4* @test at.massageDocPart
+#@+node:ekr.20110524091618.3488: *4* @@@test at.massageDocPart
 at = c.atFileCommands
 
 # A mininimal test.
@@ -2078,12 +2065,8 @@ else:
 
 assert len(p.b) == 175,len(p.b)
 #@+node:ekr.20071113201736: *4* @test zz end of leoAtFile tests
-s = '\nEnd of leoAtFile tests'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoAtFile tests')
 #@+node:ekr.20101021205258.6011: *4* at.Directives & directories
 #@+node:ekr.20100131180007.5454: *5* @test at.get/setPathUa
 at = c.atFileCommands
@@ -2711,6 +2694,7 @@ else:
     pid = subprocess.Popen(
         command,
         shell=True,
+        stdout=subprocess.PIPE, # Eliminate output.
         universal_newlines=True,
     )
     pid.communicate()
@@ -4868,12 +4852,8 @@ c.selectPosition(p) # Sets body text.
 if
 IF
 #@+node:ekr.20090615053403.4957: *4* @test zz end of leoColor tests
-s = '\nEnd of leoColor tests'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoColor tests')
 #@+node:ekr.20071113193624: *3* leoCommands
 # 7 failures with Alt-5
 #@+node:ekr.20090104053806.1: *4* @@@test c.checkFileTimeStamp & c.setFileTimeStamp
@@ -5408,6 +5388,7 @@ try:
     try:
         c.markAllAtFileNodesDirty()
     except Exception:
+        g.es_exception()
         ok = False
 finally:
     for p in c.all_positions():
@@ -5418,7 +5399,7 @@ finally:
             if p.isMarked():
                 c.clearMarked(p)
 
-if not ok: raise
+assert ok
 #@+node:ekr.20050512083822.1: *4* @test c.markSubheads
 marks = [p.v for p in c.all_positions() if p.isMarked()]
 try:
@@ -5613,12 +5594,8 @@ for obj,val in table:
     assert val == val2,'%s, expected %s, got %s' % (
         repr(obj),val,val2)
 #@+node:ekr.20071113201833: *4* @test zz end of leoCommands tests
-s = '\nEnd of leoCommands tests'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoCommands tests')
 #@+node:ekr.20071113194216: *3* leoConfig
 # 3 failurs with Alt-5
 #@+node:ekr.20120201125738.3958: *4* @@@test g.app.config.getShortcuts works when no local shortcuts
@@ -5713,34 +5690,29 @@ elif sys.platform== 'darwin':
 #@+node:ekr.20050203001146: *4* @test local settings (c.page_width)
 assert c.page_width == c.config.getInt('page_width'),c.page_width
 #@+node:ekr.20071113201854: *4* @test zz end of leoConfig tests
-s = '\nEnd of leoConfig tests'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoConfig tests')
 #@+node:ekr.20100131171342.5592: *3* leoDialogs
 #@+node:ekr.20100131171342.5593: *4* @test ctors for all dialogs
 # For some reason these don't select the dialog properly when run as a script.
 # However, the main reason for the tests is to make sure the ctors don't crash.
 # Also, for unit testing the value of c doesn't matter.
-
-oldGui = g.app.gui ; guis = [g.app.gui]
-
 import leo.core.leoGui as leoGui
-guis.append(leoGui.UnitTestGui())
-
-for gui in guis:
-    gui.runAboutLeoDialog(c,'version','copyright','url','email')
-    gui.runAskLeoIDDialog()
-    gui.runAskOkDialog(c,'title','message')
-    gui.runAskOkCancelNumberDialog(c,'title','message')
-    gui.runAskOkCancelStringDialog(c,'title','message')
-    gui.runAskYesNoDialog(c,'title','message')
-    gui.runAskYesNoCancelDialog(c,'title','message')
-    # gui.runCompareDialog(c) # Removed.
-
-g.app.gui = oldGui
+try:
+    oldGui = g.app.gui
+    guis = [g.app.gui]
+    guis.append(leoGui.UnitTestGui())
+    for gui in guis:
+        gui.runAboutLeoDialog(c,'version','copyright','url','email')
+        gui.runAskLeoIDDialog()
+        gui.runAskOkDialog(c,'title','message')
+        gui.runAskOkCancelNumberDialog(c,'title','message')
+        gui.runAskOkCancelStringDialog(c,'title','message')
+        gui.runAskYesNoDialog(c,'title','message')
+        gui.runAskYesNoCancelDialog(c,'title','message')
+        # gui.runCompareDialog(c) # Removed.
+finally:
+    g.app.gui = oldGui
 #@+node:ekr.20071113192611: *3* leoEditCommands
 #@+node:ekr.20070131175538: *4*  Commands A-B
 #@+node:ekr.20061101121602.78: *5* @test add-space-to-lines
@@ -6731,6 +6703,7 @@ else:
     exec(g.findTestScript(c,'@common x-marked-nodes test code'))
     
     def test(p):
+        target = p.copy()
         setup_test(p)
         c.cloneMarked()
         h = 'Clones of marked nodes'
@@ -6738,7 +6711,7 @@ else:
         c.undoer.undo()
         assert not g.findNodeAnywhere(c,h)
         c.undoer.redo()
-        assert c.p.h == h,c.p.h
+        assert c.p.h == h, c.p.h
     try:
         test(p)
     finally:
@@ -6774,8 +6747,8 @@ if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
 elif sys.platform.startswith('linux'):
     self.skipTest('Not for linux')
-elif g.app.gui.guiName() == 'curses':
-    self.skipTest('Not for curses gui')
+elif g.app.gui.guiName() in ('curses', 'nullGui'):
+    self.skipTest('Not for curses or null gui')
 else:
     log = c.frame.log
     c.bodyWantsFocusNow()
@@ -6794,8 +6767,8 @@ else:
 
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
-elif g.app.gui.guiName() == 'curses':
-    self.skipTest('Not for curses gui')
+elif g.app.gui.guiName() in ('nullGui', 'curses'):
+    self.skipTest('Not for curses or null gui')
 else:
     log = c.frame.log
     tabs = log.orderedTabNames()[1:]
@@ -8102,7 +8075,7 @@ elif sys.platform.startswith('win'):
             if trace: print('found: %2s %2s %s' % (n+1, offset, p and p.h))
         else:
             if trace: print('not found: %s' % (n+1))
-            assert n == 6, n
+            assert n == 8, n
             break
 else:
     self.skipTest('Skip on Linux')
@@ -8112,7 +8085,7 @@ if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
 else:
     trace = False
-    h = '@auto-org unittest/at-auto-org-line-number-test.py'
+    h = '@auto-org unittest/at-auto-org-line-number-test.org'
     root = g.findNodeAnywhere(c, h)
     assert root
     s = c.gotoCommands.get_external_file_with_sentinels(root)
@@ -8124,7 +8097,7 @@ else:
             if trace: print('found: %2s %2s %s' % (n+1, offset, p and p.h))
         else:
             if trace: print('not found: %s' % (n+1))
-            assert n == 4, n
+            assert n == 6, n
             break
 #@+node:ekr.20170401123840.6: *6* @test find_file_line: @auto-otl
 # Not valid for external tests: uses @<file> node.
@@ -8132,7 +8105,7 @@ if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
 else:
     trace = False
-    h = '@auto-otl unittest/at-auto-otl-line-number-test.py'
+    h = '@auto-otl unittest/at-auto-otl-line-number-test.otl'
     root = g.findNodeAnywhere(c, h)
     assert root
     s = c.gotoCommands.get_external_file_with_sentinels(root)
@@ -8144,7 +8117,7 @@ else:
             if trace: print('found: %2s %2s %s' % (n+1, offset, p and p.h))
         else:
             if trace: print('not found: %s' % n)
-            assert n == 4, n
+            assert n == 5, n
             break
 #@+node:ekr.20170401123840.7: *6* @test find_file_line: @auto-py
 import sys
@@ -8601,6 +8574,8 @@ def test():
 #@+node:ekr.20111006064419.3493: *5* @test move-marked-nodes
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
+elif g.app.gui.guiName() == 'nullGui':
+    self.skipTest('Not for null gui')
 else:
 
     exec(g.findTestScript(c,'@common x-marked-nodes test code'))
@@ -9047,8 +9022,9 @@ try:
     u = g.u('(pdq):\n')
     w.setInsertPoint(len(s))
     for char in u:
-        stroke = g.choose(char=='\n','Return',char)
-        event = g.app.gui.create_key_event(c,char,stroke,w)
+        ### stroke = g.choose(char=='\n','Return',char)
+        binding = 'Return' if char == '\n' else char
+        event = g.app.gui.create_key_event(c,char=char,binding=binding,w=w)
         ec.selfInsertCommand(event)
     result = w.getAllText()
     #g.trace('result',repr(result))
@@ -9070,7 +9046,7 @@ try:
     ec = c.editCommands ; w = c.frame.body.wrapper
     s = w.getAllText()
     w.setSelectionRange(len(s)-9,len(s)-6)
-    event = g.app.gui.create_key_event(c,'\t','Tab',w)
+    event = g.app.gui.create_key_event(c, binding='Tab', char='\t', w=w)
     ec.selfInsertCommand(event)
     result = w.getAllText()
     assert result.endswith('\n    ###abcdef\n'),'result\n%s' % (repr(result))
@@ -10416,7 +10392,7 @@ w = c.frame.body.wrapper
 
 for direction in ('up','down'):
     for distance in ('line','page','half-page'):
-        event = g.app.gui.create_key_event(c,None,None,w)
+        event = g.app.gui.create_key_event(c,w=w)
         ec.scrollHelper(event,direction,distance)
 #@+node:ekr.20061104172236.4: *5* @test setMoveCol
 w = c.frame.body.wrapper
@@ -10519,7 +10495,7 @@ for obj,ivar,command in table:
 #@+node:ekr.20100204173354.5375: *5* @test toggle-find-x
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
-elif g.app.gui.guiName() == 'curses':
+elif g.app.gui.guiName() in ('nullGui', 'curses'):
     self.skipTest('Not for curses')
         # The commands exist, but don't do anything,
         # which causes fail1.
@@ -10769,7 +10745,7 @@ elif c.k.defaultUnboundKeyAction == 'insert':
     c.bodyWantsFocus()
     paste = 'ABC'
     g.app.gui.replaceClipboardWith(paste)
-    event = g.app.gui.create_key_event(c,None,None,c.frame.body.wrapper)
+    event = g.app.gui.create_key_event(c,w=c.frame.body.wrapper)
     c.frame.pasteText(event)
     
     # Move around and and make sure it doesn't change.
@@ -10793,7 +10769,7 @@ w = c.edit_widget(p)
 w.setSelectionRange('end','end',insert='end')
 paste = 'ABC'
 g.app.gui.replaceClipboardWith(paste)
-event = g.app.gui.create_key_event(c,None,None,w)
+event = g.app.gui.create_key_event(c,w=w)
 c.frame.pasteText(event)
 # Move around and and make sure it doesn't change.
 try:
@@ -10815,13 +10791,14 @@ else:
     p = c.testManager.findNodeAnywhere(h)
     w = c.frame.body.wrapper
     n = c.frame.body.colorizer.recolorCount
+    # print(c.frame.body.colorizer)
     assert p,'node not found: %s' % h
     c.selectPosition(p)
     c.bodyWantsFocus()
     paste = '# Should be a comment'
     g.app.gui.replaceClipboardWith(paste)
     c.outerUpdate()
-    event = g.app.gui.create_key_event(c,None,None,c.frame.body.wrapper)
+    event = g.app.gui.create_key_event(c,w=c.frame.body.wrapper)
     c.frame.pasteText(event)
     try:
         assert c.frame.body.colorizer.recolorCount > n
@@ -11012,19 +10989,11 @@ try:
 finally:
     c.setBodyString(p,'')
 #@+node:ekr.20060131102450: *5* @test zz print end of typing tests
-s = '\nEnd of typing tests'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of typing tests')
 #@+node:ekr.20070306091949: *4* @test zz end of leoEditCommands tests
-s = '\nEnd of leoEditCommands tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoEditCommands tests.')
 #@+node:ekr.20061001114637: *3* leoFileCommands
 # 3 failures with Alt-5
 #@+node:ekr.20100206165505.5386: *4* @@test fc.handleNodeConflicts
@@ -11049,10 +11018,6 @@ c.fileCommands.handleNodeConflicts()
 c.nodeConflictList = []
 
 c.redraw()
-#@+node:ekr.20100131180007.5451: *4* @test fc.cleanSaxInputString
-s = 'test%cthis' % 27
-
-assert c.fileCommands.cleanSaxInputString(s) == 'test this'
 #@+node:ekr.20071113145804.18: *4* @test fc.deleteFileWithMessage
 fc=c.fileCommands
 fc.deleteFileWithMessage('xyzzy','test')
@@ -11062,133 +11027,6 @@ if 0: # one-time test of es statements.
     g.es("read only",color="red")
     g.es("exception deleting %s file: %s" % (fileName,kind))
     g.es("exception deleting backup file:" + fileName)
-#@+node:ekr.20100131180007.5450: *4* @test fc.getSaxUa
-expectedIconDictList = [
-{
-    'on': 'tnode',
-    'where': 'beforeHeadline',
-    'yoffset': 0,
-    # 'file': u'C:\\leo.repo\\trunk\\leo\\Icons\\Tango\\16x16\\actions\\add.png',
-    'file': 'C:\\leo.repo\\trunk\\leo\\Icons\\Tango\\16x16\\actions\\add.png',
-    'xpad': 1,
-    'type': 'file',
-    'xoffset': 2,
-    # 'relPath': u'Tango\\16x16\\actions\\add.png',
-    'relPath': 'Tango\\16x16\\actions\\add.png',
-},
-{
-    'on': 'tnode',
-    'where': 'beforeHeadline',
-    'yoffset': 0,
-    # 'file': u'C:\\leo.repo\\trunk\\leo\\Icons\\Tango\\16x16\\actions\\bottom.png',
-    'file': 'C:\\leo.repo\\trunk\\leo\\Icons\\Tango\\16x16\\actions\\bottom.png',
-    'xpad': 1,
-    'type': 'file',
-    'xoffset': 2,
-    # 'relPath': u'Tango\\16x16\\actions\\bottom.png',
-    'relPath': 'Tango\\16x16\\actions\\bottom.png',
-}]
-table = (
-('tx','raw',None,"ekr.20090701133940.1767"),
-('lineYOffset',None,3,"4b032e"),
-# A real icon
-('icons',None,expectedIconDictList,
-"5d7100287d71012855026f6e71025505746e6f6465710355047479\
-70657104550466696c6571055507796f666673657471064b006805583700000\
-0433a5c6c656f2e7265706f5c7472756e6b5c6c656f5c49636f6e735c54616e\
-676f5c31367831365c616374696f6e735c6164642e706e67710755047870616\
-471084b01550577686572657109550e6265666f7265486561646c696e65710a\
-5507786f6666736574710b4b02550772656c50617468710c581b00000054616\
-e676f5c31367831365c616374696f6e735c6164642e706e67710d757d710e28\
-55026f6e710f68035504747970657110550466696c6571115507796f6666736\
-57471124b006811583a000000433a5c6c656f2e7265706f5c7472756e6b5c6c\
-656f5c49636f6e735c54616e676f5c31367831365c616374696f6e735c626f7\
-4746f6d2e706e67711355047870616471144b01550577686572657115550e62\
-65666f7265486561646c696e6571165507786f666673657471174b025507726\
-56c506174687118581e00000054616e676f5c31367831365c616374696f6e73\
-5c626f74746f6d2e706e67711975652e"),
-)
-for attr,kind,expected,val in table:
-    result = c.fileCommands.getSaxUa(attr,val,kind=kind)
-    if expected is None: expected = val
-    assert g.toEncodedString(expected)==result,'expected %s got %s' % (
-        expected,result)
-#@+node:ekr.20100131180007.5463: *4* @test fc.handleTnodeSaxAttributes
-sax_node = g.bunch(
-    tnodeAttributes={
-# The 'tx' attribute is handled by contentHandler.tnodeAttributes.
-# 'tx':"ekr.20090701133940.1767",
-'lineYOffset':"4b032e",
-# A real icon attribute, see the tests below for what we expect
-'icons':"5d7100287d71012855026f6e71025505746e6f6465710355047479\
-70657104550466696c6571055507796f666673657471064b006805583700000\
-0433a5c6c656f2e7265706f5c7472756e6b5c6c656f5c49636f6e735c54616e\
-676f5c31367831365c616374696f6e735c6164642e706e67710755047870616\
-471084b01550577686572657109550e6265666f7265486561646c696e65710a\
-5507786f6666736574710b4b02550772656c50617468710c581b00000054616\
-e676f5c31367831365c616374696f6e735c6164642e706e67710d757d710e28\
-55026f6e710f68035504747970657110550466696c6571115507796f6666736\
-57471124b006811583a000000433a5c6c656f2e7265706f5c7472756e6b5c6c\
-656f5c49636f6e735c54616e676f5c31367831365c616374696f6e735c626f7\
-4746f6d2e706e67711355047870616471144b01550577686572657115550e62\
-65666f7265486561646c696e6571165507786f666673657471174b025507726\
-56c506174687118581e00000054616e676f5c31367831365c616374696f6e73\
-5c626f74746f6d2e706e67711975652e"
-})
-try:
-    p2 = p.insertAsLastChild()
-    v = p2.v
-    c.fileCommands.handleTnodeSaxAttributes(sax_node,v)
-    d = v.u
-    for attr in ('lineYOffset','icons'):
-        assert d.get(attr),attr
-    for attr in ('tx','a'):
-        assert d.get(attr) is None,attr # A known attribute.
-finally:
-    if 1:
-        while p.hasChildren():
-            p.firstChild().doDelete()
-#@+node:ekr.20100131180007.5460: *4* @test fc.handleVnodeSaxAttributes
-sax_node = g.bunch(
-    attributes={
-'a':'M',
-'lineYOffset':"4b032e",
-# A real icon attribute, see the tests below for what we expect
-'icons':"5d7100287d71012855026f6e71025505746e6f6465710355047479\
-70657104550466696c6571055507796f666673657471064b006805583700000\
-0433a5c6c656f2e7265706f5c7472756e6b5c6c656f5c49636f6e735c54616e\
-676f5c31367831365c616374696f6e735c6164642e706e67710755047870616\
-471084b01550577686572657109550e6265666f7265486561646c696e65710a\
-5507786f6666736574710b4b02550772656c50617468710c581b00000054616\
-e676f5c31367831365c616374696f6e735c6164642e706e67710d757d710e28\
-55026f6e710f68035504747970657110550466696c6571115507796f6666736\
-57471124b006811583a000000433a5c6c656f2e7265706f5c7472756e6b5c6c\
-656f5c49636f6e735c54616e676f5c31367831365c616374696f6e735c626f7\
-4746f6d2e706e67711355047870616471144b01550577686572657115550e62\
-65666f7265486561646c696e6571165507786f666673657471174b025507726\
-56c506174687118581e00000054616e676f5c31367831365c616374696f6e73\
-5c626f74746f6d2e706e67711975652e"
-})
-try:
-    p2 = p.insertAsLastChild()
-    v = p2.v
-    c.fileCommands.handleVnodeSaxAttributes(sax_node,v)
-    d = v.u
-    for attr in ('lineYOffset','icons'):
-        assert d.get(attr) is not None,attr
-    # The a:M attribute should mark the node.
-    assert d.get('a') is None
-    assert v.isMarked()
-    aList = d.get('icons')
-    assert aList
-    assert len(aList) == 2
-    for d2 in aList:
-        for key in ('on','where','yoffset','file'):
-            assert d2.get(key) is not None,key
-finally:
-    if 1:
-        while p.hasChildren():
-            p.firstChild().doDelete()
 #@+node:ekr.20080806072412.1: *4* @test fc.resolveArchivedPosition
 child1 = p.firstChild()
 child2 = p.firstChild().next()
@@ -11315,12 +11153,8 @@ else:
     # old gnxs:
     # assert p.v.fileIndex == ('ekr', '20090507084947', 5152)
 #@+node:ekr.20071113202045: *4* @test zz end of leoFile tests
-s = '\nEnd of leoFileCommands tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoFileCommands tests.')
 #@+node:ekr.20071113193527: *3* leoFind
 # 4 failures with Alt-5
 #@+node:ekr.20051107115231.29: *4* @@test Find keeps focus in body & shows selected text
@@ -11389,12 +11223,8 @@ else:
         c.k.simulateCommand(command)
         c.k.simulateCommand(command)
 #@+node:ekr.20071113202153: *4* @test zz end of leoFind tests
-s = '\nEnd of leoFind tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoFind tests.')
 #@+node:ekr.20071113194424: *3* leoFrame
 # 3 failures with Alt-5
 #@+node:ekr.20060912091510.1: *4* @@test add-editor & delete-editor
@@ -11486,6 +11316,8 @@ else:
 #@+node:ekr.20111121081052.3908: *4* @test c.frame.log.numberOfVisibleTabs
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
+elif g.app.gui.guiName() in ('nullGui', 'curses'):
+    self.skipTest('Not for curses or null gui')
 else:
     log = c.frame.log
     d = log.contentsDict
@@ -11500,7 +11332,7 @@ else:
 #@+node:ekr.20111121140833.3917: *4* @test c.frame.log.put & putNl
 '''These were changed, then reverted, but a unit test is important.'''
 
-if g.app.isExternalUnitTest:
+if g.app.isExternalUnitTest or g.app.gui.guiName() in ('curses', 'nullGui'):
     self.skipTest('Prints to console, which is annoying.')
 else:
     log = c.frame.log
@@ -11511,8 +11343,8 @@ else:
 # This test will have effect only when run locally.
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
-elif g.app.gui.guiName() == 'curses':
-    self.skipTest('Not for curses gui')
+elif g.app.gui.guiName() in ( 'curses', 'nullGui'):
+    self.skipTest('Not for curses or null gui')
 else:
     d = g.app.unitTestDict
     tag = 'minimize-all'
@@ -11530,7 +11362,7 @@ else:
         s = w.getAllText()
         w.setInsertPoint(len(s))
         c.k.previousSelection = 2,8
-        event = g.app.gui.create_key_event(c,None,None,w)
+        event = g.app.gui.create_key_event(c,w=w)
         c.frame.pasteText(event=event,middleButton=True)
         s2 = w.getAllText()
         assert len(s2) == len(s) + len('target')
@@ -11554,7 +11386,7 @@ else:
         assert s == s2, 'w.getAllText() != p.b: len(w)=%d, len(p)=%d' % (len(s),len(s2))
         w.setInsertPoint(len(s))
         c.k.previousSelection = 2,8
-        event = g.app.gui.create_key_event(c,None,None,w)
+        event = g.app.gui.create_key_event(c,w=w)
         c.frame.pasteText(event=event,middleButton=True)
         s2 = w.getAllText()
         assert len(s2) == len(s) + len('target')
@@ -11570,8 +11402,8 @@ else:
 
 if g.app.isExternalUnitTest:
     self.skipTest('Can not be run externally')
-elif g.app.gui.guiName() == 'curses':
-    self.skipTest('Not for curses gui')
+elif g.app.gui.guiName() in ('curses', 'nullGui'):
+    self.skipTest('Not for curses or null gui')
 else:
     d = g.app.unitTestDict
     tag = 'resize-to-screen'
@@ -11581,12 +11413,8 @@ else:
 #@+node:ekr.20100131180007.5359: *4* @test c.frame.tree.OnIconDoubleClick
 c.frame.tree.OnIconDoubleClick(p)
 #@+node:ekr.20071113202153.1: *4* @test zz end of leoFrame tests
-s = '\nEnd of leoFrame tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoFrame tests.')
 #@+node:ekr.20071113194033.3: *3* leoGlobals
 # No failures with Alt-5 but warnings about no tnode lists.
 #@+node:ekr.20100131180007.5398: *4* @test g.adjustTripleString
@@ -11740,7 +11568,7 @@ for i in range(3):
         repr(val),repr(result))
 #@+node:ekr.20111110073834.3843: *4* @test g.es_print
 '''Make sure that g.trace doesn't add an extra newline.'''
-if g.app.gui.guiName() == 'curses':
+if g.app.gui.guiName() in ('nullGui', 'curses'):
     self.skipTest('Not for curses gui')
 else:
     import sys
@@ -11774,6 +11602,45 @@ else:
         test()
     finally:
         sys.stdout = sys.__stdout__
+#@+node:ekr.20180128105733.1: *4* @test g.findNode*
+trace = False
+skipped = 0
+p0 = p.copy()
+p2 = g.findNodeAnywhere(c,'@test g.findNode*')
+assert p2 and p2.v == p.v, ('1', repr(p2), repr(p))
+p2 = g.findNodeAnywhere(c,'@test g.findNode',exact=False)
+assert p2 and p2.v == p.v, ('2', repr(p2), repr(p))
+#
+parent = p0.parent()
+if parent: # Will fail for a top-level clone
+    p2 = g.findNodeInChildren(c,parent,'@test g.findNode*')
+    assert p2 and p2.v == p.v, ('3', repr(p2), repr(p))
+    p2 = g.findNodeInChildren(c,parent,'@test g.findNode',exact=False)
+    assert p2 and p2.v == p.v, ('4', repr(p2), repr(p))
+else:
+    skipped += 1
+#
+parent = p0.parent()
+if parent: # Will fail for a top-level clone
+    p2 = g.findNodeInTree(c,parent,'@test g.findNode*')
+    assert p2 and p2.v == p.v, ('5', repr(p2), repr(p))
+    p2 = g.findNodeInTree(c,parent,'@test g.findNode',exact=False)
+    assert p2 and p2.v == p.v, ('6', repr(p2), repr(p))
+else:
+    skipped += 1
+#
+p1 = g.findTopLevelNode(c,'Active Unit Tests')
+if p1:
+    p2 = g.findTopLevelNode(c,'Active Unit Test',exact=False)
+    assert p2 and p2.v == p1.v, ('7', repr(p2), repr(p1))
+    p2 = g.findNodeInTree(c,p1,'@test g.findNode*')
+    assert p2 and p2.v == p.v, ('8', repr(p2), repr(p))
+    p2 = g.findNodeInTree(c,p1,'@test g.findNode',exact=False)
+    assert p2 and p2.v == p.v, ('9', repr(p2), repr(p))
+else:
+    skipped += 1
+if trace and skipped:
+    print('%s: skipped %s sub-tests' % (p0.h, skipped))
 #@+node:ekr.20140702101937.4245: *4* @test g.find_word
 table = (
     ('abc a bc x','bc',0,6),
@@ -11937,6 +11804,17 @@ for data in table:
     got = g.match_word(line + '\n', i, word)
     assert expected == got, (expected, i, word, line)
 # print('done')
+#@+node:ekr.20180120142320.1: *4* @test g.os_path_expandExpression
+import os
+sep = os.sep
+table = (
+    ('~{{sep}}tmp{{sep}}x.py', '~%stmp%sx.py' % (sep, sep)),
+)
+for s, expected in table:
+    if g.isWindows:
+        expected = expected.replace('\\','/')
+    got = g.os_path_expandExpression(s, c=c)
+    assert got==expected,'s: %r expected: %r got: %r' % (s,expected,got)
 #@+node:ekr.20111104112332.3953: *4* @test g.os_path_finalize_join with thumb drive
 import os
 
@@ -11979,7 +11857,7 @@ except Exception:
     raise
 #@+node:ekr.20111110073528.3843: *4* @test g.pr
 '''Make sure that g.trace doesn't add an extra newline.'''
-if g.app.gui.guiName() == 'curses':
+if g.app.gui.guiName() in ('nullGui', 'curses'):
     self.skipTest('Not for curses gui')
 else:
     import sys
@@ -12322,7 +12200,7 @@ else:
     self.skipTest('Requires Qt Gui')
 #@+node:ekr.20111110072415.3841: *4* @test g.trace
 '''Make sure that g.trace doesn't add an extra newline.'''
-if g.app.gui.guiName() == 'curses':
+if g.app.gui.guiName() in ('nullGui', 'curses'):
     self.skipTest('Not for curses gui')
 else:
     import sys
@@ -12397,12 +12275,8 @@ else:
 for ivar in ('c','g','p'):
     assert ivar in dir()
 #@+node:ekr.20071113202153.2: *4* @test zz end of leoGlobals tests
-s = '\nEnd of leoGlobals tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoGlobals tests.')
 #@+node:ekr.20100131171342.5599: *3* leoGui & leoQtGui
 #@+node:ekr.20111120124051.3992: *4* @test Ctrl-I inserts only one headline
 from leo.core.leoQt import QtCore,QtGui,QtWidgets
@@ -12462,14 +12336,14 @@ else:
 import sys
 if sys.platform.startswith('linux'):
     self.skipTest('linux test')
-elif g.app.gui.guiName() == 'curses':
-    self.skipTest('Not for curses gui')
+elif g.app.gui.guiName() in ('curses', 'nullGui'):
+    self.skipTest('Not for curses or null gui')
 else:
     fn = '<file name>'
     p2 = p.firstChild()
     tree = c.frame.tree
-    w = tree.treeWidget
     if hasattr(tree,'treeWidget'):
+        w = tree.treeWidget
         for w.was_control_drag in (True,False):
             tree.treeWidget.intraFileDrop(fn,p,p2)
             assert True==g.app.unitTestDict['checkMoveWithParentWithWarning']
@@ -12503,12 +12377,8 @@ elif g.app.gui.guiName().startswith('qt'):
 else:
      self.skipTest('Requires Qt Gui')
 #@+node:ekr.20100131171342.5603: *4* @test zz end of leoGui tests
-s = '\nEnd of leoGui tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoGui tests.')
 #@+node:ekr.20090529141856.4682: *3* leoImport
 #@+node:ekr.20090529141856.4684: *4* Export tests
 @language python
@@ -14882,6 +14752,102 @@ console.log("Listening on " + port);
 '''
 
 c.importCommands.javaScriptUnitTest(p,s=s,showTree=False)
+#@+node:ekr.20171222103210.1: *6* @test Javascript #639: many top-level nodes
+s = '''\
+// Easy test for #639: https://github.com/leo-editor/leo-editor/issues/639
+
+//=============================================================================
+// rpg_core.js v1.3.0
+//=============================================================================
+
+//-----------------------------------------------------------------------------
+/**
+ * This is not a class, but contains some methods that will be added to the
+ * standard Javascript objects.
+ *
+ * @class JsExtensions
+ */
+function JsExtensions() {
+    throw new Error('This is not a class');
+}
+
+/**
+ * Returns a number whose value is limited to the given range.
+ *
+ * @method Number.prototype.clamp
+ * @param {Number} min The lower boundary
+ * @param {Number} max The upper boundary
+ * @return {Number} A number in the range (min, max)
+ */
+Number.prototype.clamp = function(min, max) {
+    return Math.min(Math.max(this, min), max);
+};
+'''
+
+c.importCommands.javaScriptUnitTest(p,s=s,showTree=False)
+#@+node:ekr.20171224042157.1: *6* @test Javascript #639: acid test 1
+s = '''\
+// Acid test for #639: https://github.com/leo-editor/leo-editor/issues/639
+require([
+    'jquery',
+], function(
+        $,
+        termjs,
+){
+    var header = $("#header")[0];
+    function calculate_size() {
+        var height = $(window).height() - header.offsetHeight;
+    }
+    page.show_header();
+    window.onresize = function() {
+      terminal.socket.send(JSON.stringify([
+            "set_size", geom.rows, geom.cols,
+            $(window).height(), $(window).width()])
+        );
+    };
+    window.terminal = terminal;
+});
+'''
+
+c.importCommands.javaScriptUnitTest(p,s=s,showTree=False)
+#@+node:ekr.20171223094900.1: *6* @test Javascript #639 acid test 2
+s = '''\
+// Acid test for #639: https://github.com/leo-editor/leo-editor/issues/639
+require([
+    'jquery',
+], function(
+        $,
+        termjs,
+){
+    var head = "head"
+    function f1() {
+        var head1 = "head1"
+        function f11 () {
+            var v11 ="v1.1"
+        }
+        var middle1 = "middle1"
+        function f12 () {
+            var v12 ="v1.2"
+        }
+        var tail1 = "tail1"
+    }
+    var middle = "middle"
+    function f2() {
+        var head2 = "head2"
+        function f21 () {
+            var v21 ="2.1"
+        }
+        var middle2 = "middle2"
+        function f22 () {
+            var v22 = "2.2.1"
+        }
+        var tail2 = "tail2"
+    }
+    var tail = "tail"
+});
+'''
+
+c.importCommands.javaScriptUnitTest(p,s=s,showTree=False)
 #@+node:ekr.20161123202857.1: *5* org tests
 #@+node:ekr.20161123202924.1: *6* @test org-1
 s = '''\
@@ -14914,12 +14880,91 @@ try:
 finally:
     if 1:
         p.deleteAllChildren()
-        c.redraw()
+    c.redraw()
+#@+node:ekr.20171120113732.1: *6* @test org tags
+s = '''\
+* Section 1 :tag1:
+* Section 2 :tag2:
+* Section 3 :tag3:tag4:
+'''
+table = (
+    'Section 1 :tag1:',
+    'Section 2 :tag2:',
+    'Section 3 :tag3:tag4:',
+)
+try:
+    c.importCommands.orgUnitTest(p,s=s,showTree=True)
+    if 1:
+        root = c.p.firstChild()
+        p2 = root.firstChild()
+        for h in table:
+            assert p2.h == h, (p2.h, h)
+            p2.moveToThreadNext()
+        assert not root.isAncestorOf(p2), p2.h # Extra nodes
+finally:
+    if 1:
+        p.deleteAllChildren()
+    c.redraw()
 
+#@+node:ekr.20171230050347.1: *6* @test org intro
+s = '''\
+Intro line.
+* Section 1
+Sec 1.
+* Section 2
+Sec 2.
+'''
+table = (
+    'Section 1',
+    'Section 2',
+)
+try:
+    c.importCommands.orgUnitTest(p,s=s,showTree=True)
+    if 1:
+        root = c.p.firstChild()
+        p2 = root.firstChild()
+        for h in table:
+            assert p2.h == h, (p2.h, h)
+            p2.moveToThreadNext()
+        assert not root.isAncestorOf(p2), p2.h # Extra nodes
+finally:
+    if 1:
+        p.deleteAllChildren()
+    c.redraw()
+
+#@+node:ekr.20180123104303.1: *6* @test org #552
+@first # -*- coding: utf-8 -*-
+s = '''\
+* Events
+  :PROPERTIES:
+  :CATEGORY: events
+  :END:
+** 整理个人生活
+*** 每周惯例
+'''
+table = (
+    'Events',
+    '整理个人生活',
+    '每周惯例',
+)
+try:
+    c.importCommands.orgUnitTest(p,s=s,showTree=True)
+    if 1:
+        root = c.p.firstChild()
+        p2 = root.firstChild()
+        for h in table:
+            assert p2.h == g.toUnicode(h), (p2.h, g.toUnicode(h))
+            p2.moveToThreadNext()
+        assert not root.isAncestorOf(p2), p2.h # Extra nodes
+finally:
+    if 1:
+        p.deleteAllChildren()
+    c.redraw()
 #@+node:ekr.20161124040933.1: *5* otl (vim-outline) tests
 #@+node:ekr.20161124040933.2: *6* @test otl-1
 @tabwidth 4 # Required
 s = '''\
+preamble.
 Section 1
 : Sec 1.
 Section 2
@@ -16152,6 +16197,136 @@ bar
 EOT;
 }
 ?>
+#@+node:ekr.20171225163019.33: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20171225163019.34: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20171230165904.48: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20171230165904.49: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180123135055.48: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180123135055.49: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180523173242.71: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180523173242.72: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180524182728.96: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180524182728.97: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180626053305.96: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180626053305.97: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180626053549.48: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180626053549.49: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180626053904.59: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180626053904.60: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180929060022.96: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180929060022.97: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
+#@+node:ekr.20180929060128.2: *7* @@file @test php here doc
+<?php
+@others
+@language php
+@tabwidth -4
+#@+node:ekr.20180929060128.3: *8* class foo
+class foo {
+    public $bar = <<<EOT
+a test.
+bar
+EOT;
+}
+?>
 #@+node:ekr.20090529141856.4736: *5* Python tests
 
 #@+node:ekr.20161204042938.1: *6* @@test print('end python tests')
@@ -16751,7 +16926,7 @@ if __name__ == '__main__':
 '''
 table = (
     (1, "Declarations"),
-    (1, "class AttrDict"),
+    (1, "class AttrDict(dict)"),
     (2, "__init__"),
     (1, "make_parser"),
     (1, "get_options"),
@@ -16848,6 +17023,43 @@ try:
             p.moveToThreadNext()
         assert p == after, ('tree comp failed', p.h)
         assert root.b.find("if __name__ == '__main__':") > -1
+    if 1:
+        test_node.deleteAllChildren()
+finally:
+    c.redraw()
+#@+node:ekr.20180929055538.1: *6* @test python bug #978
+s = """\
+import foo
+import bar
+
+class A(object):
+pass
+class B(foo):
+pass
+class C(bar.Bar):
+pass
+"""
+table = (
+    (1, 'Declarations'),
+    (1, 'class A(object)'),
+    (1, 'class B(foo)'),
+    (1, 'class C(bar.Bar)'),
+)
+try:
+    test_node = p.copy()
+    test_node.deleteAllChildren()
+    c.importCommands .pythonUnitTest(p,s=s,showTree=True)
+    after = p.nodeAfterTree()
+    root = p.lastChild()
+    assert root.h.startswith('@@'), root.h
+    p = root.firstChild()
+    if 1:
+        for n, h in table:
+            n2 = p.level() - root.level()
+            assert h == p.h, (h, p.h)
+            assert n == n2, (n, n2, p.h)
+            p.moveToThreadNext()
+        assert p == after, ('tree comp failed', p.h)
     if 1:
         test_node.deleteAllChildren()
 finally:
@@ -17153,7 +17365,7 @@ if __name__ == '__main__':
 '''
 table = (
     (1, "Declarations"),
-    (1, "class Draggable"),
+    (1, "class Draggable(QtGui.QWidget)"),
     (2, "__init__"),
     (2, "mousePressEvent"),
     (2, "mouseMoveEvent"),
@@ -17443,11 +17655,11 @@ class mainPages(mammalProviderBase):
         return ans
 ''' 
 table = (
-    (1, 'class mammalProviderBase'),
+    (1, 'class mammalProviderBase(object)'),
     (2, '__init__'),
     (2, 'provide'),
     (2, 'imagePath'),
-    (1, 'class mainPages'),
+    (1, 'class mainPages(mammalProviderBase)'),
     (2, 'provide'),
 )
 try:
@@ -17545,7 +17757,7 @@ class LeoImportCommands(object):
 """
 table = (
     (1, 'Declarations'),
-    (1, "class LeoImportCommands"),
+    (1, "class LeoImportCommands(object)"),
     (2, "createOutline"),
     (2, "dispatch"),
     (2, "scanner_for_at_auto"),
@@ -17822,7 +18034,7 @@ if __name__=="__main__":
 table = (
     (1, 'Declarations'),
     (1, 'merge_value'),
-    (1, 'class MainDisplay'),
+    (1, 'class MainDisplay(object)'),
     (2, 'save_file'),
     (1, 'retab'),
 )
@@ -17841,10 +18053,44 @@ try:
             assert n == n2, (n, n2, p.h)
             p.moveToThreadNext()
         assert p == after, ('tree comp failed', p.h)
-    if 1:
+    if 0:
         test_node.deleteAllChildren()
 finally:
     c.redraw()
+#@+node:ekr.20180929060128.139: *7* @@file @test python top-level later decl
+#!/usr/bin/env python3
+
+@others
+if __name__=="__main__":
+    main()
+@language python
+@tabwidth -4
+#@+node:ekr.20180929060128.140: *8* Declarations
+import os
+import re
+
+#@+node:ekr.20180929060128.141: *8* merge_value
+def merge_value(v1, v2):
+    return v
+
+#@+node:ekr.20180929060128.142: *8* class MainDisplay(object)
+class MainDisplay(object):
+
+    @others
+ensure_endswith_newline = lambda x: x if x.endswith('\n') else x + '\n'
+
+#@+node:ekr.20180929060128.143: *9* save_file
+def save_file(self):
+    """Write the file out to disk."""
+    with open(self.save_name, "w") as f:
+        for newline in newlines:
+            f.write(newline)
+
+# This line should be included at the end of the class node.
+#@+node:ekr.20180929060128.144: *8* retab
+def retab(s, tabsize):
+    return ''.join(pieces)
+
 #@+node:ekr.20161115063144.28: *6* @test python trailing comment
 @tabwidth -4
     # Required when running unit tests externally.
@@ -21265,12 +21511,8 @@ for s in table:
     assert m, s
     assert m.group(0) == s, (s, m.group(0))
 #@+node:ekr.20140724164600.4590: *4* @test zz end of leoImport tests
-s = '\nEnd of leoImport tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoImport tests.')
 #@+node:ekr.20100131171342.5604: *3* leoKeys
 #@+node:ekr.20100131171342.5606: *4* @@test k.autoCompleterClass.calltip
 # This test is difficult to get right on all platforms.
@@ -21292,6 +21534,81 @@ finally:
     c.recolor()
 
 # c.frame
+#@+node:ekr.20100131171342.5608: *4* @test g.KeyStroke
+table = [
+    # Gang of four, unmodified)
+    ('bksp', 'BackSpace'),
+    ('backspace', 'BackSpace'),
+    ('backtab', 'Tab'),
+    ('linefeed', '\n'),
+    ('\r', '\n'),
+    ('return', '\n'),
+    ('tab', 'Tab'),
+    # Gang of four, with shift mod.
+    ('Shift-bksp', 'Shift+BackSpace'),
+    ('Shift-backspace', 'Shift+BackSpace'),
+    ('Shift-backtab', 'Shift+Tab'),
+    ('Shift-linefeed', 'Shift+Return'),
+    ('Shift-\r', 'Shift+Return'),
+    ('Shift-return', 'Shift+Return'),
+    ('Shift-tab', 'Shift+Tab'),
+    # Gang of four, with Alt mod.
+    ('Alt-bksp', 'Alt+BackSpace'),
+    ('Alt-backspace', 'Alt+BackSpace'),
+    ('Alt-backtab', 'Alt+Tab'),
+    ('Alt-linefeed', 'Alt+Return'),
+    ('Alt-\r', 'Alt+Return'),
+    ('Alt-return', 'Alt+Return'),
+    ('Alt-tab', 'Alt+Tab'),
+    #
+    # #912: tilde.
+    ('~', '~'),
+    ('Shift-~', '~'),
+    #
+    # Alpha
+    ('1', '1'),
+    ('a','a'),
+    ('A','A'),
+    ('Alt-a','Alt+a'),
+    ('Alt-A','Alt+a'),
+    ('Alt-Shift-a','Alt+Shift+a'),
+    # We can no longer ignore the shift.
+    # ('Alt-Shift++','Alt+plus'), # Ignore the shift.
+    ('Shift-a','A'),
+    ('Shift-A','A'),
+    ('RtArrow','Right'),
+    ('Shift-RtArrow','Shift+Right'),
+    ('PageUp','Prior'),
+    ('Prior','Prior'),
+    ('Shift-PageUp','Shift+Prior'),
+    ('PageDn','Next'),
+    ('Next','Next'),
+    ('Shift-Next','Shift+Next'),
+    ('Alt-=','Alt+='),
+    ('Alt-+','Alt++'),
+    ('Alt--','Alt+-'),
+    ('Ctrl-RtArrow','Ctrl+Right'),
+    ('Control-Right','Ctrl+Right'),
+]
+for setting, result in table:
+    stroke = g.KeyStroke(binding=setting)
+    val = stroke.s
+    assert val==result,'For %r, expected %r, Got %r' % (setting, result,val)
+#@+node:ekr.20180527141026.1: *4* @test g.KeyStroke (printable characters)
+import string
+letters = string.ascii_letters if g.isPython3 else string.letters
+# Unshifted.
+for ch in string.printable:
+    stroke = g.KeyStroke(binding=ch)
+    assert stroke.s in string.printable, (repr(ch), repr(stroke.s))
+    if ch == '\r':
+        assert stroke.s == '\n', (repr(ch), repr(stroke.s))
+    else:
+        assert stroke.s == ch, (repr(ch), repr(stroke.s))
+# Shifted.
+for ch in string.digits + letters:
+    stroke = g.KeyStroke(binding='Shift-'+ch)
+    assert stroke.s in string.printable, (repr(ch), repr(stroke.s))
 #@+node:ekr.20110509104953.3474: *4* @test k.get_leo_completions
 table = (
     ( 50,'c.'),
@@ -21328,28 +21645,26 @@ else:
     self.skipTest('Requires Qt Gui')
 #@+node:ekr.20100131171342.5605: *4* @test k.isPlainKey
 import string
-
 k = c.k
-
 for ch in (string.printable):
-    if ch == '\n': continue # A special case.
-    assert k.isPlainKey(ch), 'wrong: not plain: %s' % (ch)
-
-special = (
-    'Return', # A special case.
-    'Begin','Break','Caps_Lock','Clear','Down','End','Escape',
-    'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
-    'KP_Add', 'KP_Decimal', 'KP_Divide', 'KP_Enter', 'KP_Equal',
-    'KP_Multiply, KP_Separator,KP_Space, KP_Subtract, KP_Tab',
-    'KP_F1','KP_F2','KP_F3','KP_F4',
-    'KP_0','KP_1','KP_2','KP_3','KP_4','KP_5','KP_6','KP_7','KP_8','KP_9',
-    'Home','Left','Linefeed','Next','Num_Lock',
-    'PageDn','PageUp','Pause','Prior','Right','Up',
-    'Sys_Req',
-)
-
-for ch in special:
-    assert not k.isPlainKey(ch), 'wrong: is plain: %s' % (ch)
+    assert k.isPlainKey(ch), 'not plain: %s' % (repr(ch))
+if 0:
+    # The NullGui class knows nothing about these characters,
+    # so these tests now fail.
+    # Happily, there is a continuous unit test in k.checkKeyEvent.
+    special = (
+        'Begin','Break','Caps_Lock','Clear','Down','End','Escape',
+        'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
+        'KP_Add', 'KP_Decimal', 'KP_Divide', 'KP_Enter', 'KP_Equal',
+        'KP_Multiply, KP_Separator,KP_Space, KP_Subtract, KP_Tab',
+        'KP_F1','KP_F2','KP_F3','KP_F4',
+        'KP_0','KP_1','KP_2','KP_3','KP_4','KP_5','KP_6','KP_7','KP_8','KP_9',
+        'Home','Left','Next','Num_Lock',
+        'PageDn','PageUp','Pause','Prior','Right','Up',
+        'Sys_Req',
+    )
+    for ch in special:
+        assert not k.isPlainKey(ch), 'is plain: %s' % (ch)
 #@+node:ekr.20100212110954.5359: *4* @test k.print-bindings
 lines = c.k.printBindings()
 # assert lines[0].strip().endswith('Alt+Ctrl+Shift')
@@ -21372,40 +21687,9 @@ if 0: # Test 2
     g.app.unitTestDict[commandName] = False
     k.manufactureKeyPressForCommandName(w,commandName)
     assert g.app.unitTestDict.get(commandName)
-#@+node:ekr.20100131171342.5608: *4* @test k.strokeFromSetting
-table = (
-    ('Key-1','1'), # 2016/04/12
-    ('key-1','1'), # 2016/04/12
-    ('1', '1'), # 2016/04/12
-    ('a','a'),
-    ('A','a'),
-    ('Alt-a','Alt+a'),
-    ('Alt-A','Alt+a'),
-    ('Alt-Shift-a','Alt+A'),
-    ('Alt-=','Alt+equal'),
-    ('Alt-+','Alt+plus'),
-    # We can no longer igtnore the shift.
-    # ('Alt-Shift++','Alt+plus'), # Ignore the shift.
-    ('Alt--','Alt+minus'),
-    ('Shift-a','A'),
-    ('Shift-A','A'),
-    ('RtArrow','Right'),
-    ('Shift-RtArrow','Shift+Right'),
-    ('Ctrl-RtArrow','Ctrl+Right'),
-    ('Control-Right','Ctrl+Right'),
-    ('PageUp','Prior'), ('Prior','Prior'),('Shift-PageUp','Shift+Prior'),
-    ('PageDn','Next'),('Next','Next'),('Shift-Next','Shift+Next'),
-)
-for setting, result in table:
-    val = c.k.strokeFromSetting(setting)
-    assert val==result,'Expected %s, Got %s' % (result,val)
 #@+node:ekr.20100131171342.5609: *4* @test zz end of leoKeys tests
-s = '\nEnd of leoKeys tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoKeys tests.')
 #@+node:ekr.20071113194424.1: *3* leoNodes
 #@+node:ekr.20040712101754.181: *4*  inner @test: Test consistency between parents iter and v.parents
 # The actual test is in a child node.
@@ -22223,12 +22507,8 @@ import leo.core.leoNodes as leoNodes
 if leoNodes.use_zodb:
     p.v.__hash__()
 #@+node:ekr.20071113202452: *4* @test zz end of leoNodes tests
-s = '\nEnd of leoNodes tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoNodes tests.')
 #@+node:ekr.20080501121449.1: *4* Fundamental node operations (undo operations fail)
 #@+node:ekr.20080423110627.2: *5* @test at most one VNode has str_leo_pos attribute
 n = 0
@@ -22279,6 +22559,7 @@ finally:
             p.firstChild().doDelete(newNode=None)
     c.redraw_now(p)
 #@+node:ekr.20080503082625.3: *5* @test delete node
+# This test requires @bool select-next-after-delete = False
 root = p.copy()
 while p.hasChildren():
     p.firstChild().doDelete(newNode=None)
@@ -22402,6 +22683,7 @@ finally:
             root.firstChild().doDelete(newNode=None)
     c.redraw_now(root)
 #@+node:ekr.20080501121449.3: *5* @test insert node
+# This test requires @bool select-next-after-delete = False
 assert p.h == '@test insert node',repr(p.h)
 root = p.copy()
 while p.hasChildren():
@@ -22426,7 +22708,7 @@ try:
     # With the new undo logic, it takes 2 undoes.
     # The first undo undoes the headline changes,
     # the second undo undoes the insert node.
-    if g.app.isExternalUnitTest:
+    if g.app.isExternalUnitTest or g.app.gui.guiName() == 'nullGui':
         # The situation is different in a null Gui.
         pass
     else:
@@ -22452,14 +22734,13 @@ finally:
         while root.hasChildren():
             root.firstChild().doDelete(newNode=None)
     c.redraw_now(root)
-#@+node:ekr.20140923083354.6274: *6* A
-#@+node:ekr.20140923083354.6276: *6* inserted
-#@+node:ekr.20140923083354.6275: *6* B
+#@+node:ekr.20171112182742.3: *6* A
+#@+node:ekr.20171112182742.5: *6* newHeadline
+#@+node:ekr.20171112182742.4: *6* B
 #@+node:ekr.20080423110627.11: *5* @test move-outline-down & undo/redo
 root = p.copy()
 while p.hasChildren():
     p.firstChild().doDelete(newNode=None)
-
 try:
     p2 = p.insertAsNthChild(0)
     p2.setHeadString('A')
@@ -22497,7 +22778,6 @@ try:
     assert moved.h == 'B',          'fail 1-3'
     assert moved.back().h == 'C',   'fail 2-3'
     assert moved.next().h == 'D',   'fail 3-3'
-
 finally:
     if 1:
         while root.hasChildren():
@@ -22506,7 +22786,6 @@ finally:
 #@+node:ekr.20080503073030.1: *5* @test move-outline-left
 while p.hasChildren():
     p.firstChild().doDelete(newNode=None)
-
 try:
     p2 = p.insertAsNthChild(0)
     p2.setHeadString('A')
@@ -22521,9 +22800,7 @@ try:
     c.undoer.redo()
     c.undoer.undo()
     c.undoer.redo()
-
     moved.doDelete(newNode=p)
-
 finally:
     if 1:
         while p.hasChildren():
@@ -23541,6 +23818,8 @@ assert rst.atAutoWriteUnderlines == '=+*^~"\'`-:><_', 'fail 5: %s' % (
 import leo.core.leoImport as leoImport
 if leoImport.docutils is None:
     self.skipTest('no docutils')
+# A kludge: run the test in 
+openDirectory = c.frame.openDirectory
 s = g.findTestScript(c,'@common leoRst test code',warn=True)
 assert s, repr(p)
 exec(s)
@@ -26483,6 +26762,7 @@ This is the body of the section.</p>
 #@+node:ekr.20120307070541.3937: *4* @test rst3Test unicode characters
 @first # -*- coding: utf-8 -*-
 
+# Note: rst3Test.munge in *this* file accounts for local docutils differences.
 import leo.core.leoImport as leoImport
 if leoImport.docutils is None:
     self.skipTest('no docutils')
@@ -26775,6 +27055,7 @@ hr { /* EKR */
 #@+node:ekr.20120307070541.3948: *6* rst
 .. rst3: filename: test.html
 
+
 Test of unicode characters: ÀǋϢﻙ
 
 End of test.
@@ -26786,7 +27067,7 @@ End of test.
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="Docutils VER: http://docutils.sourceforge.net/" />
-<title></title>
+<title>&lt;string&gt;</title>
 <style type="text/css">
 
 /*ORIGINAL GOODGER + changes; up to line 224 it's standard reST stylesheet
@@ -28452,7 +28733,7 @@ after
 #@+node:ekr.20050518070540.4: *7* selection
 2.0
 2.16
-#@+node:ekr.20050518070927: *6* extractSection test1
+#@+node:ekr.20050518070927: *6* extract test3
 #@+node:ekr.20050518070927.1: *7* before
 before
     << section >>
@@ -28471,7 +28752,7 @@ sec line 3
 #@+node:ekr.20050518070927.4: *7* selection
 2.0
 5.10
-#@+node:ekr.20050518071251: *6* extractSection test2
+#@+node:ekr.20050518071251: *6* extract test4
 #@+node:ekr.20050518071251.1: *7* before
 before
     << section >>
@@ -28490,12 +28771,8 @@ after
 2.0
 2.16
 #@+node:ekr.20071113202510: *4* @test zz end of leoUndo tests
-s = '\nEnd of leoUndo tests.'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of leoUndo tests.')
 #@+node:ekr.20140802074328.4471: *3* leoVim.py
 #@+node:ekr.20140802074328.4472: *4* @test vc.on_same_line
 vc = c.vimCommands
@@ -28976,6 +29253,9 @@ files.sort()
 
 exclude = [
     # These are not real plugins...
+    'babel_api.py',
+    'babel_kill.py',
+    'babel_lib.py',
     'baseNativeTree.py',
     'leocursor.py',
     'leo_cloud_server.py',
@@ -29007,42 +29287,24 @@ for fn in files:
 # This must be true even though @bool scriptingatscriptnodes is True in this file.
 if hasattr(c,'theScriptingController'):
     # mod_scripting may be disabled when running tests externally.
-    assert not c.theScriptingController.atScriptNodes
+    val = g.app.config.valueInMyLeoSettings('scripting-at-script-nodes')
+    assert c.theScriptingController.atScriptNodes in (val, None, False), (val, c.theScriptingController.atScriptNodes)
 #@+node:ekr.20100131171342.5501: *4* @test zz end of plugins unit tests
-s = '\nEnd of plugins unit tests'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s)
+# Print does not work: it is redirected.
+g.pr('\nEnd of plugins unit tests')
 #@+node:ekr.20090306091634.1: ** @test print redraw count
 tree = c.frame.tree
 if hasattr(tree,'redrawCount'):
-    print('%s: %s' % (p.h,tree.redrawCount))
+    g.pr('%s: %s' % (p.h,tree.redrawCount))
 #@+node:ekr.20170123053430.1: ** @test print calls to jedit.setTag
 if 0:
     print('calls to jedit.setTag: %s' %
         c.frame.body.colorizer.highlighter.colorer.n_setTag)
 #@+node:ekr.20081111150402.11: ** @test zz end of all tests
 # Print does not work: it is redirected.
-s = 'all unit tests done'
-if g.app.gui.guiName() == 'curses':
-    import logging
-    logging.info(s)
-else:
-    g.pr(s,color='blue')
+g.pr('all unit tests done',color='blue')
 #@+node:ekr.20140822063016.4474: ** @test zzz force a quit
-if 0:
-    # These won't do any good if a unit test foolishly saves the outline!
-    c.k.simulateCommand('contract-all')
-    c.setChanged(False)
-    
-if g.app.gui.guiName() == 'curses':
-    import curses
-    import logging
-    logging.info('test')
-    curses.endwin()
-else:
-    c.k.simulateCommand(':q!')
+g.app.forceShutdown()
+    # Now works with curses gui.
 #@-all
 #@-leo

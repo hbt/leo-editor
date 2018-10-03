@@ -10,7 +10,7 @@ Importer = linescanner.Importer
 class Perl_Importer(Importer):
     '''A scanner for the perl language.'''
 
-    def __init__(self, importCommands,language=None, alternate_language=None):
+    def __init__(self, importCommands, **kwargs):
         '''The ctor for the Perl_ImportController class.'''
         # Init the base class.
         Importer.__init__(self,
@@ -21,7 +21,7 @@ class Perl_Importer(Importer):
 
     #@+others
     #@+node:ekr.20161027183713.1: *3* perl_i.clean_headline
-    def clean_headline(self, s):
+    def clean_headline(self, s, p=None):
         '''Return a cleaned up headline s.'''
         m = re.match(r'sub\s+(\w+)', s)
         return 'sub ' + m.group(1) if m else s
@@ -56,7 +56,6 @@ class Perl_Importer(Importer):
         Return a *general* state dictionary for the given context.
         Subclasses may override...
         '''
-        trace = False and g.unitTesting
         comment, block1, block2 = self.single_comment, self.block1, self.block2
 
         def add_key(d, key, data):
@@ -99,13 +98,10 @@ class Perl_Importer(Importer):
                 add_key(d, comment[0], ('all', comment, '', None))
             if block1 and block2:
                 add_key(d, block1[0], ('len', block1, block1, None))
-        if trace: g.trace('created %s dict for %r state ' % (self.name, context))
         return d
     #@+node:ekr.20161027094537.12: *3* perl_i.skip_regex
     def skip_regex(self, s, i, pattern):
         '''look ahead for a regex /'''
-        trace = False and not g.unitTesting
-        if trace: g.trace(repr(s))
         assert self.match(s, i, pattern)
         i += len(pattern)
         while i < len(s) and s[i] in ' \t':
@@ -123,7 +119,6 @@ class Perl_Importer(Importer):
                 else:
                     i += 1
                 assert progress < i
-        if trace: g.trace('returns', i, s[i] if i < len(s) else '')
         return i
     #@-others
 #@+node:ekr.20161105095705.1: ** class Perl_ScanState

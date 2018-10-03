@@ -89,7 +89,6 @@ def run(fn, verbose):
         args = ','.join(["fn=r'%s'" % (fn), "rc=r'%s'" % (rc_fn)])
         command = '%s -c "import leo.core.leoGlobals as g; g.run_pylint(%s)"' % (
             sys.executable, args)
-    # g.trace('===== pylint-leo.run: %s' % command)
     # If shell is True, it is recommended to pass args as a string rather than as a sequence.
     proc = subprocess.Popen(command, shell=False)
     proc.communicate()
@@ -98,11 +97,21 @@ def run(fn, verbose):
 def report_version():
     try:
         from pylint import lint
-        rc_fn = os.path.abspath(os.path.join('leo', 'test', 'pylint-leo-rc.txt'))
-        rc_fn = rc_fn.replace('\\', '/')
-        lint.Run(["--rcfile=%s" % (rc_fn), '--version',])
     except ImportError:
         g.trace('can not import pylint')
+    table = (
+        os.path.abspath(os.path.expanduser('~/.leo/pylint-leo-rc.txt')),
+        os.path.abspath(os.path.join('leo', 'test', 'pylint-leo-rc.txt')),
+    )
+    for rc_fn in table:
+        try:
+            rc_fn = rc_fn.replace('\\', '/')
+            lint.Run(["--rcfile=%s" % (rc_fn), '--version',])
+        except OSError:
+            pass
+    g.trace('no rc file found in')
+    g.printList(table)
+
 #@+node:ekr.20120307142211.9886: ** scanOptions (pylint-leo.py)
 def scanOptions():
     '''Handle all options, remove them from sys.argv.'''

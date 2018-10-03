@@ -62,7 +62,13 @@ def controller(
     '''Create an singleton instance of a bridge controller.'''
     global gBridgeController
     if not gBridgeController:
-        gBridgeController = BridgeController(gui, loadPlugins, readSettings, silent, tracePlugins, verbose)
+        gBridgeController = BridgeController(
+            gui,
+            loadPlugins,
+            readSettings,
+            silent,
+            tracePlugins,
+            verbose)
     return gBridgeController
 #@+node:ekr.20070227092442.2: ** class BridgeController
 class BridgeController(object):
@@ -91,8 +97,8 @@ class BridgeController(object):
         Init the Leo app to which this class gives access.
         This code is based on leo.run().
         '''
-        trace = False
-        if not self.isValidPython(): return
+        if not self.isValidPython():
+            return
         #@+<< initLeo imports >>
         #@+node:ekr.20070227093629.1: *4* << initLeo imports >> initLeo (leoBridge)
         # Import leoGlobals, but do NOT set g.
@@ -113,12 +119,9 @@ class BridgeController(object):
         self.g = g = leoGlobals
         assert(g.app)
         g.app.leoID = None
-        g.app.trace_plugins = self.tracePlugins
+        if self.tracePlugins:
+            g.app.debug.append('plugins')
         g.app.silentMode = self.silentMode
-        if trace:
-            import sys
-            g.trace(sys.argv)
-            g.trace('g.app.silentMode', g.app.silentMode)
         # Create the g.app.pluginsController here.
         import leo.core.leoPlugins as leoPlugins
         leoPlugins.init() # Necessary. Sets g.app.pluginsController.
@@ -143,6 +146,7 @@ class BridgeController(object):
         g.app.inBridge = True # Added 2007/10/21: support for g.getScript.
         g.app.nodeIndices = leoNodes.NodeIndices(g.app.leoID)
         g.app.config = leoConfig.GlobalConfigManager()
+        g.app.setGlobalDb() # Fix #556.
         if self.readSettings:
             lm.readGlobalSettingsFiles()
                 # reads only standard settings files, using a null gui.
@@ -150,9 +154,9 @@ class BridgeController(object):
                 # that might contain myLeoSettings.leo.
         else:
             # Bug fix: 2012/11/26: create default global settings dicts.
-            settings_d, shortcuts_d = lm.createDefaultSettingsDicts()
+            settings_d, bindings_d = lm.createDefaultSettingsDicts()
             lm.globalSettingsDict = settings_d
-            lm.globalShortcutsDict = shortcuts_d
+            lm.globalBindingsDict = bindings_d
         self.createGui() # Create the gui *before* loading plugins.
         if self.verbose: self.reportDirectories()
         self.adjustSysPath()
@@ -172,7 +176,6 @@ class BridgeController(object):
         '''Adjust sys.path to enable imports as usual with Leo.'''
         import sys
         g = self.g
-        # g.trace('loadDir',g.app.loadDir)
         leoDirs = ('config', 'doc', 'extensions', 'modes', 'plugins', 'core', 'test') # 2008/7/30
         for theDir in leoDirs:
             path = g.os_path_finalize_join(g.app.loadDir, '..', theDir)
@@ -282,17 +285,11 @@ class BridgeController(object):
     def createFrame(self, fileName):
         '''Create a commander and frame for the given file.
         Create a new frame if the fileName is empty or non-exisent.'''
-        trace = False
         g = self.g
         if fileName.strip():
             if g.os_path_exists(fileName):
-                if trace:
-                    import time; t1 = time.time()
                 # This takes a long time due to imports in c.__init__
                 c = g.openWithFileName(fileName)
-                if trace:
-                    t2 = time.time()
-                    g.trace('%s %0.2fsec' % (fileName, (t2 - t1)))
                 if c: return c
             elif not self.silentMode:
                 print('file not found: %s. creating new window' % (fileName))

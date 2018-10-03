@@ -10,7 +10,7 @@ import leo.core.leoGlobals as g
 class Elisp_Importer(Importer):
     '''The importer for the elisp lanuage.'''
 
-    def __init__(self, importCommands):
+    def __init__(self, importCommands, **kwargs):
         '''Elisp_Importer.__init__'''
         # Init the base class.
         Importer.__init__(self,
@@ -26,7 +26,6 @@ class Elisp_Importer(Importer):
 
     def get_new_dict(self, context):
         '''elisp state dictionary for the given context.'''
-        trace = False and g.unitTesting
         comment, block1, block2 = self.single_comment, self.block1, self.block2
 
         def add_key(d, pattern, data):
@@ -63,12 +62,11 @@ class Elisp_Importer(Importer):
                 add_key(d, comment, ('all', comment, '', None))
             if block1 and block2:
                 add_key(d, block1, ('len', block1, block1, None))
-        if trace: g.trace('created %s dict for %4r state ' % (self.name, context))
         return d
     #@+node:ekr.20161127184128.4: *3* elisp_i.clean_headline
     elisp_clean_pattern = re.compile(r'^\s*\(\s*defun\s+([\w_-]+)')
 
-    def clean_headline(self, s):
+    def clean_headline(self, s, p=None):
         '''Return a cleaned up headline s.'''
         m = self.elisp_clean_pattern.match(s)
         if m and m.group(1):
@@ -140,7 +138,8 @@ class Elisp_ScanState:
 #@-others
 importer_dict = {
     'class': Elisp_Importer,
-    'extensions': ['.el'],
+        # Also clojure, clojurescript
+    'extensions': ['.el', '.clj', '.cljs', '.cljc',],
 }
 #@@language python
 #@@tabwidth -4

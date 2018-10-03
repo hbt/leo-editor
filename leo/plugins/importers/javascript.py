@@ -5,21 +5,83 @@ import re
 import leo.core.leoGlobals as g
 import leo.plugins.importers.linescanner as linescanner
 Importer = linescanner.Importer
+Target = linescanner.Target
 #@+others
 #@+node:ekr.20140723122936.18049: ** class JS_Importer
 class JS_Importer(Importer):
 
-    def __init__(self, importCommands, language=None, alternate_language=None):
+    def __init__(self, importCommands, force_at_others=False, **kwargs):
         '''The ctor for the JS_ImportController class.'''
         # Init the base class.
         Importer.__init__(self,
             importCommands,
-            gen_refs = True,
+            gen_refs = False, # Fix #639.
             language = 'javascript',
             state_class = JS_ScanState,
         )
 
     #@+others
+    #@+node:ekr.20180123051226.1: *3* js_i.post_pass & helpers
+    def post_pass(self, parent):
+        '''
+        Optional Stage 2 of the javascript pipeline.
+
+        All substages **must** use the API for setting body text. Changing
+        p.b directly will cause asserts to fail later in i.finish().
+        '''
+        self.clean_all_headlines(parent)
+        self.clean_all_nodes(parent)
+        self.remove_singleton_at_others(parent)
+        self.unindent_all_nodes(parent)
+        #
+        # This sub-pass must follow unindent_all_nodes.
+        self.promote_trailing_underindented_lines(parent)
+        self.promote_last_lines(parent)
+        #
+        # Usually the last sub-pass, but not in javascript.
+        self.delete_all_empty_nodes(parent)
+        #
+        # Must follow delete_all_empty_nodes.
+        self.remove_organizer_nodes(parent)
+        # 
+        # Remove up to 5 more levels of @others.
+        for i in range(5):
+            if self.remove_singleton_at_others(parent):
+                self.remove_organizer_nodes(parent)
+            else:
+                break
+    #@+node:ekr.20180123051401.1: *4* js_i.remove_singleton_at_others
+    at_others = re.compile(r'^\s*@others\b')
+
+    def remove_singleton_at_others(self, parent):
+        '''Replace @others by the body of a singleton child node.'''
+        found = False
+        for p in parent.subtree():
+            if p.numberOfChildren() == 1:
+                child = p.firstChild()
+                lines = self.get_lines(p)
+                matches = [i for i,s in enumerate(lines) if self.at_others.match(s)]
+                if len(matches) == 1:
+                    found = True
+                    i = matches[0]
+                    lines = lines[:i] + self.get_lines(child) + lines[i+1:]
+                    self.set_lines(p, lines)
+                    self.clear_lines(child) # Delete child later. Is this enough???
+        return found
+        
+                
+    #@+node:ekr.20180123060307.1: *4* js_i.remove_organizer_nodes
+    def remove_organizer_nodes(self, parent):
+        '''Removed all organizer nodes created by i.delete_all_empty_nodes.'''
+        # Careful: Restart this loop whenever we find an organizer.
+        found = True
+        while found:
+            found = False
+            for p in parent.subtree():
+                if p.h.lower() == 'organizer' and not self.get_lines(p):
+                    p.promote()
+                    p.doDelete()
+                    found = True # Restart the loop.
     #@+node:ekr.20161105140842.5: *3* js_i.scan_line & helpers
     #@@nobeautify
 
@@ -54,8 +116,6 @@ class JS_Importer(Importer):
         (, [, {, ;, and binops can only be followed by a regexp.
         ), ], }, ids, strings and numbers can only be followed by a div operator.
         '''
-        trace = False # and not g.unitTesting
-        trace_ch = True
         context = prev_state.context
         curlies, parens = prev_state.curlies, prev_state.parens
         expect = None # (None, 'regex', 'div')
@@ -72,7 +132,6 @@ class JS_Importer(Importer):
             assert expect is None, expect
             progress = i
             ch, s2 = s[i], s[i:i+2]
-            if trace and trace_ch: g.trace(repr(ch)) #, repr(s2))
             if context == '/*':
                 if s2 == '*/':
                     i += 2
@@ -81,7 +140,8 @@ class JS_Importer(Importer):
                 else:
                     i += 1 # Eat the next comment char.
             elif context:
-                assert context in ('"', "'"), repr(context)
+                assert context in ('"', "'", '`'), repr(context)
+                    # #651: support back tick
                 if ch == '\\':
                     i += 2
                 elif context == ch:
@@ -96,7 +156,8 @@ class JS_Importer(Importer):
                 # Start a comment.
                 i += 2
                 context = '/*'
-            elif ch in ('"', "'"):
+            elif ch in ('"', "'", '`',):
+                # #651: support back tick
                 # Start a string.
                 i += 1
                 context = ch
@@ -147,7 +208,6 @@ class JS_Importer(Importer):
             else:
                 m = self.op_pattern.match(s, i)
                 if m:
-                    if trace: g.trace('OP', m.group(0))
                     i += len(m.group(0))
                     expect = 'regex'
                 elif ch == '/':
@@ -173,49 +233,111 @@ class JS_Importer(Importer):
             assert progress < i
         d = {'context':context, 'curlies':curlies, 'parens':parens}
         state = JS_ScanState(d)
-        if trace: g.trace(state)
         return state
     #@+node:ekr.20161011045426.1: *4* js_i.skip_regex
     def skip_regex(self, s, i):
         '''Skip an *actual* regex /'''
-        trace = False # and not g.unitTesting
-        trace_ch = True
-        if trace: g.trace('ENTRY', i, repr(s[i:]))
         assert s[i] == '/', (i, repr(s))
         i1 = i
         i += 1
         while i < len(s):
             progress = i
             ch = s[i]
-            if trace and trace_ch: g.trace(repr(ch))
             if ch == '\\':
                 i += 2
             elif ch == '/':
                 i += 1
                 if i < len(s) and s[i] in 'igm':
                     i += 1 # Skip modifier.
-                if trace: g.trace('FOUND', i, s[i1:i])
                 return i
             else:
                 i += 1
             assert progress < i
         return i1 # Don't skip ahead.
+    #@+node:ekr.20171224145755.1: *3* js_i.starts_block
+    func_patterns = [
+        re.compile(r'\)\s*=>\s*\{'),
+        re.compile(r'\bclass\b'),
+        re.compile(r'\bfunction\b'),
+    ]
+
+    def starts_block(self, i, lines, new_state, prev_state):
+        '''True if the new state starts a block.'''
+        if new_state.level() <= prev_state.level():
+            return False
+        line = lines[i]
+        for pattern in self.func_patterns:
+            if pattern.search(line) is not None:
+                return True
+        return False
     #@+node:ekr.20161101183354.1: *3* js_i.clean_headline
-    def clean_headline(self, s):
+    clean_regex_list1 = [
+        re.compile(r'\s*\(?(function\b\s*[\w]*)\s*\('),
+            # (function name (
+        re.compile(r'\s*(\w+\s*\:\s*\(*\s*function\s*\()'),
+            # name: (function (
+        re.compile(r'\s*(?:const|let|var)\s*(\w+\s*(?:=\s*.*)=>)'),
+            # const|let|var name = .* =>
+    ]
+    clean_regex_list2 = [
+        re.compile(r'(.*\=)(\s*function)'),
+            # .* = function
+    ]
+    clean_regex_list3 = [
+        re.compile(r'(.*\=\s*new\s*\w+)\s*\(.*(=>)'),
+            # .* = new name .* =>
+        re.compile(r'(.*)\=\s*\(.*(=>)'),
+            # .* = ( .* =>
+        re.compile(r'(.*)\((\s*function)'),
+            # .* ( function
+        re.compile(r'(.*)\(.*(=>)'),
+            # .* ( .* =>
+        re.compile(r'(.*)(\(.*\,\s*function)'),
+            # .* \( .*, function
+    ]
+    clean_regex_list4 = [
+        re.compile(r'(.*)\(\s*(=>)'),
+            # .* ( =>
+    ]
+
+    def clean_headline(self, s, p=None, trace=False):
         '''Return a cleaned up headline s.'''
+        # pylint: disable=arguments-differ
         s = s.strip()
         # Don't clean a headline twice.
         if s.endswith('>>') and s.startswith('<<'):
             return s
-        elif 1:
-            # Imo, showing the whole line is better than truncating it.
-            # However the lines must have a reasonable length.
-            return g.truncate(s, 100)
-        else:
-            i = s.find('(')
-            if i > -1:
-                s = s[:i]
-            return g.truncate(s, 100)
+        for ch in '{(=':
+            if s.endswith(ch):
+                s = s[:-1].strip()
+        # First regex cleanup. Use \1.
+        for pattern in self.clean_regex_list1:
+            m = pattern.match(s)
+            if m:
+                s = m.group(1)
+                break
+        # Second regex cleanup. Use \1 + \2
+        for pattern in self.clean_regex_list2:
+            m = pattern.match(s)
+            if m:
+                s = m.group(1) + m.group(2)
+                break
+        # Third regex cleanup. Use \1 + ' ' + \2
+        for pattern in self.clean_regex_list3:
+            m = pattern.match(s)
+            if m:
+                s = m.group(1) + ' ' + m.group(2)
+                break
+        # Fourth cleanup. Use \1 + ' ' + \2 again
+        for pattern in self.clean_regex_list4:
+            m = pattern.match(s)
+            if m:
+                s = m.group(1) + ' ' + m.group(2)
+                break
+        # Final whitespace cleanups.
+        s = s.replace('  ', ' ')
+        s = s.replace(' (', '(')
+        return g.truncate(s, 100)
     #@-others
 #@+node:ekr.20161105092745.1: ** class JS_ScanState
 class JS_ScanState:

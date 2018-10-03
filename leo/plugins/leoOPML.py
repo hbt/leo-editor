@@ -138,18 +138,24 @@ class NodeClass(object):
 class OpmlController(object):
     '''The controller class for this plugin.'''
     #@+others
-    #@+node:ekr.20060904103412.7: *3* oc.__init__
+    #@+node:ekr.20060904103412.7: *3* oc.__init__& reloadSettings
     def __init__(self, c):
         '''Ctor for OpmlController class.'''
         self.c = c
         c.opmlCommands = self
         c.k.registerCommand('read-opml-file', self.readOpmlCommand)
         c.k.registerCommand('write-opml-file', self.writeOpmlCommand)
-        self.opml_read_derived_files = c.config.getBool('opml_read_derived_files')
-        self.opml_write_derived_files = c.config.getBool('opml_write_derived_files')
         self.currentVnode = None
         self.topVnode = None
         self.generated_gnxs = {} # Keys are gnx's (strings).  Values are vnodes.
+        self.reloadSettings()
+        
+    def reloadSettings(self):
+        c = self.c
+        c.registerReloadSettings(self)
+        self.opml_read_derived_files = c.config.getBool('opml_read_derived_files')
+        self.opml_write_derived_files = c.config.getBool('opml_write_derived_files')
+
     #@+node:ekr.20060914163456: *3* oc.createVnodes & helpers
     def createVnodes(self, c, dummyRoot):
         '''**Important**: this method and its helpers are low-level code
@@ -203,7 +209,6 @@ class OpmlController(object):
             tnodeList = s and s.split(',')
             if tnodeList:
                 # This tnode list will be resolved later.
-                # g.trace('found tnodeList',v.headString(),len(tnodeList))
                 v.tempTnodeList = tnodeList
     #@+node:ekr.20060913220707: *3* oc.dumpTree
     def dumpTree(self, root, dummy=True):
@@ -314,7 +319,6 @@ class OpmlController(object):
         d = {}
         for key in list(self.generated_gnxs.keys()):
             v = self.generated_gnxs.get(key)
-            # g.trace('v',id(v),'fileIndex',v.fileIndex,v.headString()[:20])
             d[key] = v
         return d
     #@+node:ekr.20060917214140: *4* oc.setCurrentPosition
@@ -334,7 +338,6 @@ class OpmlController(object):
                 for gnx in p.v.tempTnodeList:
                     v = self.generated_gnxs.get(gnx)
                     if v:
-                        # g.trace('found',v,gnx,v)
                         result.append(v)
                     else:
                         g.trace('No tnode for %s' % gnx)
@@ -530,7 +533,6 @@ class PutToOPML(object):
         # Remember: entries in the tnodeList correspond to @+node sentinels, _not_ to tnodes!
         if not hasattr(p.v, 'tnodeList') or not p.v.tnodeList:
             return None
-        # g.trace('tnodeList',p.v.tnodeList)
         # Assign fileIndices.
         for v in p.v.tnodeList:
             try: # Will fail for None or any pre 4.1 file index.
@@ -738,7 +740,6 @@ class SaxContentHandler(xml.sax.saxutils.XMLGenerator):
             if name == 'leo:body_outline_ratio':
                 try:
                     ratio = float(val)
-                    # g.trace(ratio)
                 except ValueError:
                     pass
         self.ratio = ratio
@@ -790,7 +791,6 @@ class SaxContentHandler(xml.sax.saxutils.XMLGenerator):
                 elif name == 'width': width = int(val)
         except ValueError:
             pass
-        # g.trace(top,left,height,width)
         c.frame.setTopGeometry(width, height, left, top)
         c.frame.deiconify()
         c.frame.lift()

@@ -1,6 +1,8 @@
 #@+leo-ver=5-thin
 #@+node:ekr.20170428084207.121: * @file ../external/npyscreen/fmActionForm.py
 #!/usr/bin/python
+import leo.core.leoGlobals as g
+assert g
 #@+others
 #@+node:ekr.20170428084207.122: ** Declarations
 import weakref
@@ -21,12 +23,14 @@ class ActionForm(fmForm.Form):
             widget.EXITED_ESCAPE:   self.find_cancel_button
         })
 
-    #@+node:ekr.20170428084207.125: *3* find_cancel_button
+    #@+node:ekr.20170428084207.125: *3* ActionForm.find_cancel_button
     def find_cancel_button(self):
         self.editw = len(self._widgets__)-2
 
     #@+node:ekr.20170428084207.126: *3* ActionForm.edit
     def edit(self):
+        
+        g.trace('===== (ActionForm)')
         # Add ok and cancel buttons. Will remove later
         tmp_rely, tmp_relx = self.nextrely, self.nextrelx
 

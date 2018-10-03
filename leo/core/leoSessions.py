@@ -24,61 +24,65 @@ class LeoSessionException(Exception):
 
 class SessionManager(object):
     #@+others
-    #@+node:ekr.20120420054855.14351: *3*  ctor (LeoSessionController)
+    #@+node:ekr.20120420054855.14351: *3* SessionManager.ctor
     def __init__(self):
         self.path = self.get_session_path()
-    #@+node:ekr.20120420054855.14246: *3* clear_session
+    #@+node:ekr.20120420054855.14246: *3* SessionManager.clear_session
     def clear_session(self, c):
         '''Close all tabs except the presently selected tab.'''
         for frame in g.app.windowList:
             if frame.c != c:
                 frame.c.close()
-    #@+node:ekr.20120420054855.14417: *3* error
+    #@+node:ekr.20120420054855.14417: *3* SessionManager.error
     # def error (self,s):
         # # Do not use g.trace or g.es here.
         # print(s)
-    #@+node:ekr.20120420054855.14245: *3* get_session
+    #@+node:ekr.20120420054855.14245: *3* SessionManager.get_session
     def get_session(self):
         '''Return a list of UNLs for open tabs.'''
         result = []
-        for frame in g.app.windowList:
-            result.append(frame.c.p.get_UNL(
-                with_file=True, with_proto=False, with_index=True
-                    # The defaults.
-            ))
+
+        mf = getattr(g.app.gui.frameFactory, 'masterFrame', None)
+        if mf:
+            outlines = [mf.widget(i).leo_c for i in range(mf.count())]
+        else:
+            outlines = [i.c for i in g.app.windowList]
+
+        for c in outlines:
+            result.append(c.p.get_UNL(with_file=True, with_proto=False, with_index=True))
+
         return result
-    #@+node:ekr.20120420054855.14416: *3* get_session_path
+    #@+node:ekr.20120420054855.14416: *3* SessionManager.get_session_path
     def get_session_path(self):
         '''Return the path to the session file.'''
         for path in (g.app.homeLeoDir, g.app.homeDir):
             if g.os_path_exists(path):
                 return g.os_path_finalize_join(path, 'leo.session')
         return None
-    #@+node:ekr.20120420054855.14247: *3* load_session
+    #@+node:ekr.20120420054855.14247: *3* SessionManager.load_session
     def load_session(self, c=None, unls=None):
         '''Open a tab for each item in UNLs & select the indicated node in each.'''
-        trace = False and not g.unitTesting
-        if unls is None:
-            unls = []
+        if not unls:
+            return
+        unls = [z.strip() for z in unls or [] if z.strip()]
         for unl in unls:
-            if trace: g.trace('1: unl', unl)
-            if unl.strip():
-                i = unl.find("#")
-                if i > -1:
-                    fn, unl = unl[: i], unl[i:]
-                else:
-                    fn, unl = unl, ''
-                fn = fn.strip()
-                exists = fn and g.os_path_exists(fn)
-                if trace: g.trace('2: exists:', exists, 'fn', fn, 'unl', unl)
-                if exists:
-                    c2 = g.app.loadManager.loadLocalFile(fn, gui=g.app.gui, old_c=c)
-                    for p in c2.all_positions():
-                        if p.get_UNL() == unl:
-                            c2.setCurrentPosition(p)
-                            c2.redraw()
-                            break
-    #@+node:ekr.20120420054855.14248: *3* load_snapshot
+            i = unl.find("#")
+            if i > -1:
+                fn, unl = unl[: i], unl[i:]
+            else:
+                fn, unl = unl, ''
+            fn = fn.strip()
+            exists = fn and g.os_path_exists(fn)
+            if not exists:
+                if 'startup' in g.app.debug:
+                    g.trace('file not found:', fn)
+                continue
+            if 'startup' in g.app.debug:
+                g.trace('loading:', fn)
+            g.app.loadManager.loadLocalFile(fn, gui=g.app.gui, old_c=c)
+                # This selects the proper position.
+           
+    #@+node:ekr.20120420054855.14248: *3* SessionManager.load_snapshot
     def load_snapshot(self):
         '''
         Load a snapshot of a session from the leo.session file.
@@ -93,7 +97,7 @@ class SessionManager(object):
         else:
             print('can not load session: no leo.session file')
             return None
-    #@+node:ekr.20120420054855.14249: *3* save_snapshot
+    #@+node:ekr.20120420054855.14249: *3* SessionManager.save_snapshot
     def save_snapshot(self, c=None):
         '''
         Save a snapshot of the present session to the leo.session file.

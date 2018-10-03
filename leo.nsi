@@ -12,7 +12,7 @@
 !include LogicLib.nsh
 
 ;##version
-!define version         "5.6"
+!define version         "5.8"
 
 ; These are *not* Python strings--backslashes are fine.
 
@@ -22,7 +22,7 @@
 ;!define icon            "C:\leo.repo\trunk\leo\Icons\SplashScreen.ico"
 !define ext             ".leo"
 !define leo_hklm        "SOFTWARE\EKR\Leo"
-!define license         "License.txt"
+!define license         "LICENSE"
 !define name            "Leo"
 !define publisher       "Edward K. Ream"
 !define site            "http://leoeditor.com/"

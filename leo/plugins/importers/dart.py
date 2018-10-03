@@ -9,7 +9,7 @@ Importer = linescanner.Importer
 class Dart_Importer(Importer):
     '''The importer for the dart lanuage.'''
 
-    def __init__(self, importCommands):
+    def __init__(self, importCommands, **kwargs):
         '''Dart_Importer.__init__'''
         # Init the base class.
         Importer.__init__(self,
@@ -23,7 +23,7 @@ class Dart_Importer(Importer):
     #@+node:ekr.20161123121021.1: *3* dart_i.clean_headline
     dart_pattern = re.compile(r'^\s*([\w_]+\s*)+\(')
 
-    def clean_headline(self, s):
+    def clean_headline(self, s, p=None):
 
         m = self.dart_pattern.match(s)
         if m:
